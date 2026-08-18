@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+SQLAlchemy
+alembic
+psycopg[binary]
+neo4j
+redis
+celery
+networkx
+scikit-learn
+xgboost
+ortools
