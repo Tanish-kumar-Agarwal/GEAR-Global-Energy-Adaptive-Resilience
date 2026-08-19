@@ -1,18 +1,38 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { Activity, Loader2, Download, Share2, Search, SlidersHorizontal, Info, Target, AlertTriangle, TrendingUp, TrendingDown, Anchor, Globe, Clock } from 'lucide-react';
 import { RequiresAPI } from '@/components/ui/requires-api';
 import { MapViewer } from '@/components/map-viewer';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { ApiClient } from '@/lib/api';
+import { useJobPolling } from '@/lib/useJobPolling';
+import { useSearchParams, useRouter } from 'next/navigation';
 
-export default function ScenarioLab() {
+function ScenarioLabContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  
+  const initialTarget = searchParams.get('target_id') || 'CHK_HORMUZ';
+  
   const [running, setRunning] = useState(false);
-  const [results, setResults] = useState<any>(null);
-  const [scenarioName, setScenarioName] = useState('Hormuz Disruption');
+  const [scenarioName, setScenarioName] = useState(`Disruption: ${initialTarget}`);
+  const [targetId, setTargetId] = useState(initialTarget);
   const [severity, setSeverity] = useState(0.7);
   const [duration, setDuration] = useState(30);
   const [assets, setAssets] = useState<any[]>([]);
+  
+  const [scenarioId, setScenarioId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  
+  const { status, results, error } = useJobPolling(jobId, scenarioId);
+
+  useEffect(() => {
+    // If polling hook says it's done or failed, stop local spinning state
+    if (status === 'COMPLETED' || status === 'FAILED' || error) {
+      setRunning(false);
+    }
+  }, [status, error]);
 
   useEffect(() => {
     fetch('http://localhost:8000/api/v1/world/assets')
@@ -23,32 +43,20 @@ export default function ScenarioLab() {
 
   const runSimulation = async () => {
     setRunning(true);
-    setResults(null);
+    setJobId(null);
+    setScenarioId(null);
     try {
-      // 1. Create scenario
-      const createRes = await fetch('http://localhost:8000/api/v1/scenarios', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: scenarioName,
-          chokepoint_id: 'CHK_HORMUZ',
-          severity: severity,
-          duration_days: duration
-        })
+      const scenario = await ApiClient.createScenario({
+        name: scenarioName,
+        target_id: targetId,
+        severity: severity,
+        duration_days: duration
       });
-      const scenario = await createRes.json();
 
-      // 2. Trigger run
-      await fetch(`http://localhost:8000/api/v1/scenarios/${scenario.id}/run`, { method: 'POST' });
-
-      // 3. Poll (hackathon wait)
-      setTimeout(async () => {
-        const res = await fetch(`http://localhost:8000/api/v1/scenarios/${scenario.id}/results`);
-        const data = await res.json();
-        setResults(data.results);
-        setRunning(false);
-      }, 2500);
-
+      const job = await ApiClient.runScenario(scenario.id);
+      
+      setScenarioId(scenario.id);
+      setJobId(job.job_id);
     } catch (e) {
       console.error(e);
       setRunning(false);
@@ -59,16 +67,24 @@ export default function ScenarioLab() {
   const mcData = results?.monte_carlo ? generateBellCurve(results.monte_carlo.p10_gap, results.monte_carlo.p50_gap, results.monte_carlo.p90_gap) : [];
 
   return (
-    <div className="h-full w-full bg-[#0f172a] p-3 flex flex-col gap-3 text-slate-300 font-sans overflow-hidden">
+    <div className="h-full min-h-[850px] min-w-[1280px] w-full bg-[#0f181b] p-3 flex flex-col gap-3 text-slate-300 font-sans">
       
       {/* HEADER SECTION (Inside the page since topnav is global, but the reference has a specific title bar here) */}
-      <div className="flex justify-between items-center bg-[#1e293b] rounded-md border border-slate-700/50 p-2 px-4 shadow-sm shrink-0">
+      <div className="flex justify-between items-center bg-[#182227] rounded-md border border-slate-700/50 p-2 px-4 shadow-sm shrink-0">
         <h1 className="text-sm font-bold tracking-widest text-slate-200 flex items-center gap-2 uppercase">
            <Activity className="h-4 w-4 text-emerald-400" />
            IMAGE 13: THE CORRECT STRATEGIC SCENARIO SIMULATION LAB
         </h1>
         <div className="flex items-center gap-2">
-          <button className="px-3 py-1.5 text-xs font-medium text-slate-300 bg-[#0f172a] hover:bg-slate-800 border border-slate-700 rounded transition-colors">
+          {status === 'COMPLETED' && scenarioId && (
+            <button 
+              onClick={() => router.push(`/response-orchestrator?scenario_id=${scenarioId}`)}
+              className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded transition-colors shadow shadow-blue-900/50"
+            >
+              Proceed to Response Orchestrator
+            </button>
+          )}
+          <button className="px-3 py-1.5 text-xs font-medium text-slate-300 bg-[#0f181b] hover:bg-slate-800 border border-slate-700 rounded transition-colors">
             Compare Strategies
           </button>
           <button className="px-3 py-1.5 text-xs font-medium text-white bg-emerald-700 hover:bg-emerald-600 border border-emerald-800 rounded transition-colors">
@@ -77,18 +93,35 @@ export default function ScenarioLab() {
         </div>
       </div>
 
+      {/* ERROR BANNER */}
+      {error && (
+        <div className="bg-red-900/30 border border-red-800 rounded-md p-3 flex items-start justify-between shrink-0 shadow-sm">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-400 shrink-0" />
+            <div>
+              <h3 className="text-sm font-bold text-red-400">Simulation Job Failed</h3>
+              <p className="text-xs text-slate-300 mt-0.5">{error}</p>
+              {jobId && <p className="text-[10px] text-slate-500 font-mono mt-1">Job ID: {jobId}</p>}
+            </div>
+          </div>
+          <button onClick={runSimulation} className="px-4 py-1.5 bg-red-900/50 hover:bg-red-800 text-red-200 text-xs font-bold rounded transition-colors border border-red-700/50">
+            Retry Simulation
+          </button>
+        </div>
+      )}
+
       {/* MAIN GRID */}
       <div className="flex-1 flex gap-3 min-h-0">
         
         {/* LEFT COLUMN: CONFIGURATION PANEL */}
-        <div className="w-[300px] flex flex-col gap-3 flex-shrink-0 bg-[#1e293b] rounded-md border border-slate-700/50 overflow-y-auto no-scrollbar shadow-sm">
+        <div className="w-[300px] flex flex-col gap-3 flex-shrink-0 bg-[#182227] rounded-md border border-slate-700/50 overflow-y-auto no-scrollbar shadow-sm">
           <div className="p-3 border-b border-slate-700/50 font-medium text-[11px] uppercase tracking-wider text-slate-400 bg-slate-800/50">
             Configuration Panel
           </div>
           <div className="p-4 flex flex-col gap-5">
             <div>
               <label className="block text-[11px] font-medium text-slate-300 mb-1.5">Event Type</label>
-              <select className="w-full bg-[#0f172a] border border-slate-700 rounded p-2 text-xs text-slate-300 focus:outline-none focus:border-blue-500 appearance-none">
+              <select className="w-full bg-[#0f181b] border border-slate-700 rounded p-2 text-xs text-slate-300 focus:outline-none focus:border-blue-500 appearance-none">
                 <option>Chokepoint Disruption</option>
                 <option>Production Shock</option>
               </select>
@@ -98,21 +131,19 @@ export default function ScenarioLab() {
               <label className="block text-[11px] font-medium text-slate-300 mb-1.5">Target</label>
               <div className="relative">
                 <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-slate-500" />
-                <input type="text" placeholder="Search chokepoint or region..." className="w-full bg-[#0f172a] border border-slate-700 rounded p-2 pl-7 text-xs text-slate-300 focus:outline-none focus:border-blue-500" />
+                <input type="text" placeholder="Search chokepoint or region..." className="w-full bg-[#0f181b] border border-slate-700 rounded p-2 pl-7 text-xs text-slate-300 focus:outline-none focus:border-blue-500" />
               </div>
               <div className="mt-2 h-24 bg-slate-900 rounded border border-slate-700/50 flex items-center justify-center relative overflow-hidden">
                  <Globe className="h-24 w-24 text-slate-800 absolute opacity-30" />
                  <div className="z-10 flex items-center gap-1 text-[10px] text-red-400 bg-red-950/80 border border-red-900 px-2 py-0.5 rounded">
-                   <Target className="h-3 w-3" /> Strait of Hormuz
+                   <Target className="h-3 w-3" /> {targetId}
                  </div>
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-slate-300 mb-1.5">Chokepoint</label>
-              <select className="w-full bg-[#0f172a] border border-slate-700 rounded p-2 text-xs text-red-400 font-medium focus:outline-none focus:border-red-500 appearance-none">
-                <option>Strait of Hormuz</option>
-              </select>
+              <label className="block text-[11px] font-medium text-slate-300 mb-1.5">Target ID</label>
+              <input type="text" value={targetId} onChange={(e) => setTargetId(e.target.value)} className="w-full bg-[#0f181b] border border-slate-700 rounded p-2 text-xs text-red-400 font-medium focus:outline-none focus:border-red-500" />
             </div>
 
             <div className="space-y-4">
@@ -121,7 +152,7 @@ export default function ScenarioLab() {
               <div>
                 <div className="flex justify-between items-end mb-2">
                   <span className="text-[11px] text-slate-300">Severity: {(severity * 100).toFixed(0)}% <span className="text-amber-400 ml-1">(MODERATE)</span></span>
-                  <input type="number" value={(severity * 100).toFixed(0)} readOnly className="w-12 bg-[#0f172a] border border-slate-700 rounded p-1 text-xs text-center text-slate-300" />
+                  <input type="number" value={(severity * 100).toFixed(0)} readOnly className="w-12 bg-[#0f181b] border border-slate-700 rounded p-1 text-xs text-center text-slate-300" />
                 </div>
                 <input type="range" min="0" max="1" step="0.05" value={severity} onChange={(e) => setSeverity(parseFloat(e.target.value))} className="w-full accent-blue-500 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
                 <div className="flex justify-between mt-1 text-[9px] text-slate-500"><span className="w-8">30%</span><span className="w-8 text-center">Yield</span><span className="w-8 text-right">High</span></div>
@@ -130,7 +161,7 @@ export default function ScenarioLab() {
               <div>
                 <div className="flex justify-between items-end mb-2">
                   <span className="text-[11px] text-slate-300">Duration: {duration} Days</span>
-                  <input type="number" value={duration} readOnly className="w-12 bg-[#0f172a] border border-slate-700 rounded p-1 text-xs text-center text-slate-300" />
+                  <input type="number" value={duration} readOnly className="w-12 bg-[#0f181b] border border-slate-700 rounded p-1 text-xs text-center text-slate-300" />
                 </div>
                 <input type="range" min="1" max="120" step="1" value={duration} onChange={(e) => setDuration(parseInt(e.target.value))} className="w-full accent-blue-500 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" />
                 <div className="flex justify-between mt-1 text-[9px] text-slate-500"><span className="w-8">0 Days</span><span className="w-8 text-center">Yield</span><span className="w-8 text-right">120 Days</span></div>
@@ -152,16 +183,35 @@ export default function ScenarioLab() {
         <div className="flex-1 flex flex-col gap-3 min-w-0">
           
           {/* IMPACT CASCADE VIEW */}
-          <div className="bg-[#1e293b] rounded-md border border-slate-700/50 p-3 h-24 flex-shrink-0 shadow-sm relative">
+          <div className="bg-[#182227] rounded-md border border-slate-700/50 p-3 h-24 flex-shrink-0 shadow-sm relative">
              <div className="absolute top-2 left-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase">Impact Cascade View</div>
              <div className="absolute top-2 right-3"><button className="px-2 py-0.5 text-[9px] border border-slate-600 rounded text-slate-400 hover:bg-slate-700">View as Timeline</button></div>
              <div className="mt-4 h-full">
-                <RequiresAPI endpoint="GET /api/v1/world/supply-chain-status" />
+                {results?.cascade ? (
+                   <div className="flex gap-2 text-xs h-full items-center pl-2">
+                     <div className="flex flex-col items-center">
+                        <span className="text-[10px] text-slate-500 mb-1">Target</span>
+                        <span className="px-2 py-1 bg-red-900/30 text-red-400 border border-red-800/50 rounded">{results.cascade.initial_disruption?.target}</span>
+                     </div>
+                     <span className="text-slate-600">→</span>
+                     <div className="flex flex-col items-center">
+                        <span className="text-[10px] text-slate-500 mb-1">Shortfall</span>
+                        <span className="px-2 py-1 bg-amber-900/30 text-amber-400 border border-amber-800/50 rounded">{results.impact?.supply_gap}M bbl</span>
+                     </div>
+                     <span className="text-slate-600">→</span>
+                     <div className="flex flex-col items-center">
+                        <span className="text-[10px] text-slate-500 mb-1">Econ Impact</span>
+                        <span className="px-2 py-1 bg-blue-900/30 text-blue-400 border border-blue-800/50 rounded">${results.economic_impact?.impact?.total}B</span>
+                     </div>
+                   </div>
+                ) : (
+                   <div className="text-xs text-slate-500 flex items-center h-full pl-2">Run simulation to view cascade</div>
+                )}
              </div>
           </div>
 
           {/* MAIN MAP */}
-          <div className="flex-1 bg-[#1e293b] rounded-md border border-slate-700/50 relative overflow-hidden shadow-sm">
+          <div className="flex-1 bg-[#182227] rounded-md border border-slate-700/50 relative overflow-hidden shadow-sm">
              <div className="absolute inset-0 bg-slate-950 flex items-center justify-center">
                  {assets.length > 0 ? <MapViewer assets={assets} /> : <div className="animate-pulse text-sm">Loading Graph...</div>}
              </div>
@@ -183,7 +233,7 @@ export default function ScenarioLab() {
 
           {/* SPLIT SUMMARY & CHART */}
           <div className="flex gap-3 h-48 flex-shrink-0">
-             <div className="w-1/3 bg-[#1e293b] rounded-md border border-slate-700/50 p-3 shadow-sm flex flex-col">
+             <div className="w-1/3 bg-[#182227] rounded-md border border-slate-700/50 p-3 shadow-sm flex flex-col">
                 <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-3">Scenario Summary</h3>
                 <div className="flex flex-col gap-2 text-xs flex-1">
                    <div className="flex"><span className="w-24 text-slate-500">Name</span><span className="text-slate-200 truncate">{scenarioName}</span></div>
@@ -194,7 +244,7 @@ export default function ScenarioLab() {
                 </div>
              </div>
 
-             <div className="flex-1 bg-[#1e293b] rounded-md border border-slate-700/50 p-3 shadow-sm flex flex-col relative">
+             <div className="flex-1 bg-[#182227] rounded-md border border-slate-700/50 p-3 shadow-sm flex flex-col relative">
                 <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-2">Monte Carlo Outlook <span className="text-slate-500 normal-case">(Supply Gap)</span></h3>
                 
                 {results?.monte_carlo ? (
@@ -241,11 +291,11 @@ export default function ScenarioLab() {
              <div className="bg-slate-800 rounded flex items-center px-2 py-1 text-[9px] text-slate-400 h-6 shrink-0 absolute -mt-4 left-3 font-medium border border-slate-700/50">IMPACT BREAKDOWN</div>
              
              <ImpactCard title="Supply Gap" value={results ? `${results.monte_carlo?.p50_gap}M` : '--'} sub="vs Baseline" icon={<Anchor className="w-3 h-3 text-blue-400" />} />
-             <ImpactCard title="Storage Depletion" value={results ? "3.2 Days" : '--'} sub="vs Baseline" icon={<DatabaseIcon />} />
-             <ImpactCard title="Route Disruption" value={results ? "68 %" : '--'} sub="of Traffic Affected" icon={<RouteIcon />} />
-             <ImpactCard title="Port Congestion" value={results ? "41 %" : '--'} sub="vs Baseline" icon={<ShipIcon />} color="text-red-400" />
-             <ImpactCard title="Refinery Utilization" value={results ? "↓11 %" : '--'} sub="vs Baseline" icon={<FactoryIcon />} />
-             <ImpactCard title="Delivery Delay" value={results ? "6.8 Days" : '--'} sub="Average Increase" icon={<Clock className="w-3 h-3 text-purple-400" />} />
+             <ImpactCard title="Storage Depletion" value={results ? "UNAVAILABLE" : '--'} sub="vs Baseline" icon={<DatabaseIcon />} />
+             <ImpactCard title="Route Disruption" value={results?.graph_overlay ? `${results.graph_overlay.blast_radius?.affected_routes?.length || 0}` : (results ? "UNAVAILABLE" : '--')} sub="Routes Affected" icon={<RouteIcon />} color="text-amber-400" />
+             <ImpactCard title="Exposed Assets" value={results?.graph_overlay ? `${results.graph_overlay.blast_radius?.affected_assets?.length || 0}` : (results ? "UNAVAILABLE" : '--')} sub="Downstream Assets" icon={<ShipIcon />} color="text-red-400" />
+             <ImpactCard title="Exposed Nations" value={results?.graph_overlay ? `${results.graph_overlay.blast_radius?.affected_countries?.length || 0}` : (results ? "UNAVAILABLE" : '--')} sub="Downstream Nations" icon={<Globe className="w-3 h-3 text-blue-400" />} color="text-blue-400" />
+             <ImpactCard title="Trade Flows" value={results?.graph_overlay ? `${results.graph_overlay.blast_radius?.affected_trade_flows?.length || 0}` : (results ? "UNAVAILABLE" : '--')} sub="Flows Affected" icon={<Clock className="w-3 h-3 text-purple-400" />} color="text-purple-400" />
           </div>
 
         </div>
@@ -253,29 +303,78 @@ export default function ScenarioLab() {
         {/* RIGHT COLUMN: METRICS */}
         <div className="w-[280px] flex flex-col gap-3 flex-shrink-0 overflow-y-auto no-scrollbar">
           
-          <div className="bg-[#1e293b] rounded-md border border-slate-700/50 p-4 shadow-sm flex flex-col gap-4">
+          <div className="bg-[#182227] rounded-md border border-slate-700/50 p-4 shadow-sm flex flex-col gap-4 relative min-h-[200px]">
             <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Key Impact Metrics <span className="normal-case text-slate-500">(30 Days)</span></h3>
-            <div className="flex flex-col gap-3">
-              <RightMetric label="Global Supply Gap" value="21.3 Mb/d" trend="↑ 21%" color="text-red-400" />
-              <RightMetric label="Price Impact (Oil)" value="$104 /bbl" trend="↑ 24%" color="text-red-400" />
-              <RightMetric label="LNG Price Impact" value="$16.8 /MMBtu" trend="↑ 32%" color="text-red-400" />
-              <RightMetric label="Reserve Depletion (India)" value="3.2 Days" trend="↑ 32%" color="text-red-400" />
-              <RightMetric label="Shipping Cost Index" value="241 Index" trend="↑ 41%" color="text-red-400" />
-              <RightMetric label="Refinery Utilization (India)" value="78 %" trend="↓ 11%" color="text-emerald-400" />
-            </div>
+            <RequiresAPI endpoint="GET /api/v1/market/impact-metrics" />
           </div>
 
-          <div className="bg-[#1e293b] rounded-md border border-slate-700/50 p-4 shadow-sm relative overflow-hidden min-h-[140px]">
-            <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-3">Economic Impact <span className="normal-case text-slate-500">(India)</span></h3>
-            <RequiresAPI endpoint="GET /api/v1/market/economic-impact" />
+          <div className="bg-[#182227] rounded-md border border-slate-700/50 p-4 shadow-sm relative overflow-hidden min-h-[140px]">
+            <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-3">Economic Impact <span className="normal-case text-slate-500">(Estimate)</span></h3>
+            {results?.economic_impact ? (
+               <div className="flex flex-col gap-2 text-xs">
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-700/50">
+                     <span className="text-slate-400">Total Est. Impact (P50)</span>
+                     <span className={results.economic_impact.impact.total === 'data_unavailable' ? "text-slate-500 font-bold tracking-tight text-sm uppercase" : "text-red-400 font-bold tracking-tight text-sm"}>
+                        {results.economic_impact.impact.total === 'data_unavailable' ? 'DATA UNAVAILABLE' : `$${results.economic_impact.impact.total}B`}
+                     </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                     <span className="text-slate-500">Supply Shortage</span>
+                     <span className={results.economic_impact.impact.supply_shortage === 'data_unavailable' ? "text-slate-500 uppercase" : "text-slate-300"}>
+                        {results.economic_impact.impact.supply_shortage === 'data_unavailable' ? 'UNAVAILABLE' : `$${results.economic_impact.impact.supply_shortage}B`}
+                     </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                     <span className="text-slate-500">Price Impact</span>
+                     <span className={results.economic_impact.impact.price_impact === 'data_unavailable' ? "text-slate-500 uppercase" : "text-slate-300"}>
+                        {results.economic_impact.impact.price_impact === 'data_unavailable' ? 'UNAVAILABLE' : `$${results.economic_impact.impact.price_impact}B`}
+                     </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                     <span className="text-slate-500">Replacement Cost</span>
+                     <span className={results.economic_impact.impact.replacement_procurement === 'data_unavailable' ? "text-slate-500 uppercase" : "text-slate-300"}>
+                        {results.economic_impact.impact.replacement_procurement === 'data_unavailable' ? 'UNAVAILABLE' : `$${results.economic_impact.impact.replacement_procurement}B`}
+                     </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                     <span className="text-slate-500">Logistics Impact</span>
+                     <span className={results.economic_impact.impact.logistics === 'data_unavailable' ? "text-slate-500 uppercase" : "text-slate-300"}>
+                        {results.economic_impact.impact.logistics === 'data_unavailable' ? 'UNAVAILABLE' : `$${results.economic_impact.impact.logistics}B`}
+                     </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                     <span className="text-slate-500">Reserve Impact</span>
+                     <span className={results.economic_impact.impact.reserve === 'data_unavailable' ? "text-slate-500 uppercase" : "text-slate-300"}>
+                        {results.economic_impact.impact.reserve === 'data_unavailable' ? 'UNAVAILABLE' : `$${results.economic_impact.impact.reserve}B`}
+                     </span>
+                  </div>
+                  
+                  <div className="mt-2 pt-2 border-t border-slate-700/50 flex flex-col gap-1 text-[9px] text-slate-500">
+                     <div className="flex justify-between">
+                        <span className="text-emerald-400/80">P10</span>
+                        <span className="text-emerald-400/80">
+                           {results.economic_impact.uncertainty.p10 === null ? 'UNAVAILABLE' : `$${results.economic_impact.uncertainty.p10}B`}
+                        </span>
+                     </div>
+                     <div className="flex justify-between">
+                        <span className="text-red-400/80">P90</span>
+                        <span className="text-red-400/80">
+                           {results.economic_impact.uncertainty.p90 === null ? 'UNAVAILABLE' : `$${results.economic_impact.uncertainty.p90}B`}
+                        </span>
+                     </div>
+                  </div>
+               </div>
+            ) : (
+               <RequiresAPI endpoint="GET /api/v1/market/economic-impact" />
+            )}
           </div>
 
-          <div className="bg-[#1e293b] rounded-md border border-slate-700/50 p-4 shadow-sm relative overflow-hidden min-h-[180px] flex-1">
+          <div className="bg-[#182227] rounded-md border border-slate-700/50 p-4 shadow-sm relative overflow-hidden min-h-[180px] flex-1">
             <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-3">Affected Volumes <span className="normal-case text-slate-500">(30 Days)</span></h3>
             <RequiresAPI endpoint="GET /api/v1/market/affected-volumes" />
           </div>
 
-          <div className="bg-[#1e293b] rounded-md border border-slate-700/50 p-4 shadow-sm">
+          <div className="bg-[#182227] rounded-md border border-slate-700/50 p-4 shadow-sm">
             <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-3">Export & Share</h3>
             <div className="flex flex-col gap-2">
                <button className="w-full py-1.5 flex items-center justify-center gap-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded transition-colors"><Download size={14} /> Download Report (PDF)</button>
@@ -292,9 +391,17 @@ export default function ScenarioLab() {
   );
 }
 
+export default function ScenarioLab() {
+  return (
+    <Suspense fallback={<div className="p-8 text-white">Loading Scenario Lab...</div>}>
+      <ScenarioLabContent />
+    </Suspense>
+  );
+}
+
 function ImpactCard({ title, value, sub, icon, color = "text-slate-200" }: any) {
   return (
-    <div className="bg-[#1e293b] flex-1 rounded-md border border-slate-700/50 p-2 shadow-sm flex flex-col justify-between">
+    <div className="bg-[#182227] flex-1 rounded-md border border-slate-700/50 p-2 shadow-sm flex flex-col justify-between">
       <div className="flex items-center gap-1 mb-1">
         <div className="w-4 h-4 rounded bg-slate-800 flex items-center justify-center border border-slate-700 shrink-0">{icon}</div>
         <span className="text-[9px] text-slate-400 uppercase truncate leading-tight">{title}</span>
@@ -307,20 +414,7 @@ function ImpactCard({ title, value, sub, icon, color = "text-slate-200" }: any) 
   );
 }
 
-function RightMetric({ label, value, trend, color }: any) {
-  return (
-    <div className="flex justify-between items-center border-b border-slate-800/50 pb-2 last:border-0 last:pb-0">
-      <div className="flex flex-col gap-1">
-         <span className="text-xs text-slate-300">{label}</span>
-         <span className="text-[10px] text-slate-500 h-2 bg-slate-800 w-16 rounded overflow-hidden"><div className={`h-full w-full opacity-30 ${color.replace('text-', 'bg-')}`}></div></span>
-      </div>
-      <div className="flex flex-col items-end">
-         <span className={`text-[10px] font-bold ${color}`}>{trend}</span>
-         <span className="text-xs font-mono text-slate-200">{value}</span>
-      </div>
-    </div>
-  );
-}
+
 
 // Math helper for Monte Carlo Chart visual
 function generateBellCurve(p10: number, p50: number, p90: number) {

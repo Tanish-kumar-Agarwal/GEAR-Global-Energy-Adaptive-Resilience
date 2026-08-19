@@ -24,9 +24,40 @@ class EventType(enum.Enum):
     UPDATE = "UPDATE"
     DELETE = "DELETE"
 
+class Role(enum.Enum):
+    ADMIN = "ADMIN"
+    ANALYST = "ANALYST"
+    OPERATOR = "OPERATOR"
+    DECISION_MAKER = "DECISION_MAKER"
+    VIEWER = "VIEWER"
+
 # ---------------------------------------------------------
 # CORE ENTITIES
 # ---------------------------------------------------------
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    username = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    role = Column(Enum(Role), default=Role.VIEWER)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class SecurityAudit(Base):
+    __tablename__ = "security_audits"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    event_type = Column(String, index=True)
+    actor_id = Column(String, nullable=True)
+    resource_type = Column(String, nullable=True)
+    resource_id = Column(String, nullable=True)
+    action = Column(String, nullable=True)
+    outcome = Column(String)
+    reason = Column(String, nullable=True)
+    request_id = Column(String, nullable=True)
+    correlation_id = Column(String, nullable=True)
+    metadata_payload = Column(JSON, nullable=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class Country(Base):
     __tablename__ = "countries"
@@ -89,12 +120,19 @@ class GeopoliticalEvent(Base):
     __tablename__ = "geopolitical_events"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     type = Column(String)
+    title = Column(String, nullable=True)
+    description = Column(String, nullable=True)
     location = Column(String)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     severity = Column(Float)
-    affected_entity_id = Column(String)
+    affected_entity_id = Column(String, nullable=True)
     confidence = Column(Float)
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     source_id = Column(String)
+    source_event_id = Column(String, unique=True, index=True) # Used for idempotency
+    raw_payload = Column(JSON, nullable=True)
+    ingestion_time = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class RiskScore(Base):
     __tablename__ = "risk_scores"
@@ -140,3 +178,27 @@ class OutboxEvent(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     processed_at = Column(DateTime, nullable=True)
     retry_count = Column(Integer, default=0)
+
+class DecisionAudit(Base):
+    __tablename__ = "decision_audits"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    scenario_id = Column(String, nullable=True)
+    recommendation_id = Column(String, nullable=True)
+    status = Column(String)
+    action_plan = Column(JSON)
+    actor_id = Column(String, nullable=True)
+    reason = Column(String, nullable=True)
+    decision_snapshot = Column(JSON, nullable=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class StrategyScenario(Base):
+    __tablename__ = "strategy_scenarios"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String)
+    baseline_scenario_id = Column(String, index=True)
+    levers = Column(JSON)
+    status = Column(Enum(JobStatus), default=JobStatus.QUEUED)
+    job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=True)
+    result = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+

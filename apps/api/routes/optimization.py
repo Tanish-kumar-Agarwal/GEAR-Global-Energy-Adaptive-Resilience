@@ -1,30 +1,58 @@
-from fastapi import APIRouter
-from optimization.procurement import optimize_procurement
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+import uuid
+
+from core.database import get_db
+from models.domain import Job, JobStatus
+from workers.tasks import execute_recovery_optimization
+from core.security import RequirePermissions, User
 
 router = APIRouter(prefix="/api/v1/optimization", tags=["Optimization"])
 
-@router.post("/procurement")
-def run_procurement_optimization():
-    # Mock data based on the MVP dataset for immediate hackathon demonstration
-    suppliers = [
-        {"id": "SAU_ARAMCO", "capacity": 12.0, "cost": 75.0},
-        {"id": "USA_EXXON", "capacity": 8.0, "cost": 85.0}
-    ]
-    routes = [
-        {"id": "RT_HORMUZ_ASIA", "supplier_id": "SAU_ARAMCO", "destination_id": "IND", "capacity": 21.0, "cost": 2.0},
-        {"id": "RT_US_ASIA", "supplier_id": "USA_EXXON", "destination_id": "IND", "capacity": 5.0, "cost": 5.0}
-    ]
-    destinations = [
-        {"id": "IND", "demand": 5.0, "shortage_penalty": 200.0}
-    ]
+class OptimizationRequest(BaseModel):
+    scenario_id: str
+
+@router.post("/procurement", status_code=202)
+def run_procurement_optimization(req: OptimizationRequest, db: Session = Depends(get_db), user: User = Depends(RequirePermissions("optimization:execute"))):
+    # Verify the scenario job exists
+    scenario_id_uuid = uuid.UUID(req.scenario_id)
+    scenario_job = db.query(Job).filter(Job.id == scenario_id_uuid).first()
+    if not scenario_job:
+        raise HTTPException(status_code=404, detail="Scenario job not found")
+        
+    # Create the optimization job
+    opt_job = Job(type="RECOVERY_OPTIMIZATION")
+    db.add(opt_job)
+    db.commit()
     
-    result = optimize_procurement(suppliers, routes, destinations, demand=5.0)
+    try:
+        # Trigger Celery task
+        execute_recovery_optimization.delay(str(opt_job.id), str(scenario_job.id))
+    except Exception as e:
+        db.delete(opt_job)
+        db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "failed",
+                "error_code": "QUEUE_UNAVAILABLE",
+                "component": "redis",
+                "retryable": True
+            }
+        )
     
+    return {"job_id": str(opt_job.id), "status": "QUEUED"}
+
+@router.get("/{job_id}")
+def get_optimization_result(job_id: str, db: Session = Depends(get_db), user: User = Depends(RequirePermissions("optimization:read"))):
+    job_uuid = uuid.UUID(job_id)
+    job = db.query(Job).filter(Job.id == job_uuid).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Optimization job not found")
+        
     return {
-        "status": result["status"],
-        "recommendation": {
-            "total_estimated_cost": result.get("total_cost", 0),
-            "procurement_plan": result.get("flows", {}),
-            "shortage_risk": result.get("shortages", {})
-        }
+        "job_id": str(job.id),
+        "status": job.status.value,
+        "result": job.result
     }

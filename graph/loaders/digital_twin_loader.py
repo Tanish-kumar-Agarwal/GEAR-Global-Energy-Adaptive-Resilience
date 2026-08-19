@@ -52,7 +52,15 @@ def load_full_graph_projection():
                 a_id=a.id, c_id=a.country_id
             )
 
-        # 4. Routes & Chokepoints
+        # 4. Commodities
+        commodities = db.query(Commodity).all()
+        for com in commodities:
+            neo4j_client.execute_write(
+                "MERGE (n:Commodity {id: $id}) SET n.name = $name",
+                id=com.id, name=com.name
+            )
+
+        # 5. Routes & Chokepoints
         routes = db.query(Route).all()
         for r in routes:
             neo4j_client.execute_write(
@@ -66,8 +74,6 @@ def load_full_graph_projection():
                 "MERGE (n:Chokepoint {id: $id}) SET n.name = $name",
                 id=chk.id, name=chk.name
             )
-            # For MVP, assume Middle East to Asia routes pass through Hormuz/Malacca if applicable
-            # In a real model, this mapping is explicit. For demo, we infer by name.
             neo4j_client.execute_write(
                 """
                 MATCH (r:Route), (c:Chokepoint)
@@ -76,17 +82,39 @@ def load_full_graph_projection():
                 """
             )
 
-        # 5. Trade Flows (The core dependency edges)
+        # 6. Trade Flows (The core dependency edges and nodes)
         flows = db.query(TradeFlow).all()
         for f in flows:
+            # We promote TradeFlow to a Node
+            tf_id = str(f.id)
             neo4j_client.execute_write(
                 """
-                MATCH (s:Supplier {id: $s_id}), (d:Country {id: $d_id}), (r:Route {id: $r_id})
-                MERGE (s)-[tf:EXPORTS {route: $r_id, commodity: $com_id}]->(d)
+                MERGE (tf:TradeFlow {id: $id})
                 SET tf.volume = $vol
-                MERGE (tf_route:Route {id: $r_id})-[:TRANSPORTS]->(d)
                 """,
-                s_id=f.supplier_id, d_id=f.destination_country_id, r_id=f.route_id, com_id=f.commodity_id, vol=f.volume
+                id=tf_id, vol=f.volume
+            )
+            
+            # Link TradeFlow to Route, Commodity, Country, Supplier
+            neo4j_client.execute_write(
+                """
+                MATCH (tf:TradeFlow {id: $tf_id})
+                MATCH (s:Supplier {id: $s_id})
+                MATCH (d:Country {id: $d_id})
+                MATCH (r:Route {id: $r_id})
+                MATCH (com:Commodity {id: $com_id})
+                MATCH (orig:Country {id: $s_country_id}) // Supplier's country
+                
+                MERGE (tf)-[:ORIGINATES_FROM]->(orig)
+                MERGE (tf)-[:DESTINED_FOR]->(d)
+                MERGE (tf)-[:USES_ROUTE]->(r)
+                MERGE (tf)-[:INVOLVES_COMMODITY]->(com)
+                
+                // Keep supplier connections explicit
+                MERGE (s)-[:SUPPLIES_COMMODITY]->(com)
+                MERGE (s)-[:EXPORTS_VIA]->(tf)
+                """,
+                tf_id=tf_id, s_id=f.supplier_id, d_id=f.destination_country_id, r_id=f.route_id, com_id=f.commodity_id, s_country_id=next((s.country_id for s in suppliers if s.id == f.supplier_id), None)
             )
 
         print("Graph projection complete!")
@@ -96,3 +124,4 @@ def load_full_graph_projection():
 
 if __name__ == "__main__":
     load_full_graph_projection()
+

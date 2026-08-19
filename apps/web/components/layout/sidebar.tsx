@@ -8,7 +8,7 @@ export function Sidebar() {
   const pathname = usePathname();
   
   return (
-    <aside className="w-16 h-screen bg-[#0f172a] border-r border-[#1e293b] flex flex-col items-center py-4 flex-shrink-0 z-50">
+    <aside className="w-16 h-screen bg-[#0f181b] border-r border-[#182227] flex flex-col items-center py-4 flex-shrink-0 z-50">
       <div className="flex flex-col gap-6 w-full items-center mb-auto">
         {/* Logo Icon Placeholder */}
         <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-blue-400 font-bold border border-blue-900/50">
@@ -20,7 +20,7 @@ export function Sidebar() {
           <Link href="/war-room"><NavItem icon={<LayoutGrid size={20} />} active={pathname === '/war-room'} /></Link>
           <Link href="/scenario-lab"><NavItem icon={<Clock size={20} />} active={pathname === '/scenario-lab'} /></Link>
           <Link href="/strategy-lab"><NavItem icon={<LineChart size={20} />} active={pathname === '/strategy-lab'} /></Link>
-          <NavItem icon={<Shield size={20} />} />
+          <Link href="/data-intelligence"><NavItem icon={<Shield size={20} />} active={pathname === '/data-intelligence'} /></Link>
         </nav>
       </div>
       

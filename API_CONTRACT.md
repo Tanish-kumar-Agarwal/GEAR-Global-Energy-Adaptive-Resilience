@@ -7,7 +7,11 @@ Strictly structured around domains. Long-running tasks DO NOT block the HTTP res
 - `GET /api/v1/world` (Baseline state)
 - `GET /api/v1/map` (GeoJSON for map)
 - `GET/POST /api/v1/events` 
-- `GET /api/v1/risks`
+- `GET /api/v1/risks/trend`
+- `GET /api/v1/risks/exposures`
+- `GET /api/v1/risks/evaluation`
+- `GET /api/v1/intelligence/events`
+- `GET /api/v1/intelligence/explainability`
 - `GET /api/v1/recommendations`
 - `GET/POST /api/v1/decisions`
 
