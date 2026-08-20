@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { Activity, AlertTriangle, Package, Map as MapIcon, Globe, ShieldAlert, TrendingUp, TrendingDown, Clock, Database } from 'lucide-react';
-import { RiskTrendChart, RiskExposures, ActiveEventsList } from '@/components/risk-components';
+import { RiskTrendChart, RiskExposures, ActiveEventsList, GlobalSupplyBalanceChart } from '@/components/risk-components';
 import { SystemHealthComponent } from '@/components/system-health';
 import { MapViewer } from '@/components/map-viewer';
 import { ApiClient } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { DATA_MODE } from '@/lib/config';
 import { HACKATHON_TOP_RISKS, HACKATHON_WORLD_OVERVIEW } from '@/data/snapshot';
+import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 
 function UnavailableData({ label }: { label: string }) {
   return (
@@ -25,30 +26,51 @@ function UnavailableData({ label }: { label: string }) {
 }
 
 function WatchlistList() {
-  const [assets, setAssets] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const getAssetType = (id: string) => {
+    switch (id) {
+      case 'R1': return 'Chokepoint';
+      case 'R2': return 'Policy';
+      case 'R3': return 'Route';
+      case 'R4': return 'Geopolitics';
+      case 'R5': return 'Policy';
+      default: return 'Asset';
+    }
+  };
 
-  useEffect(() => {
-    ApiClient.getWatchlistAssets().then(res => {
-      setAssets(res.slice(0, 10)); // Just show top 10
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
+  const getTargetArrow = (id: string) => {
+    return id === 'R5' ? (
+      <span className="text-amber-400 font-bold">→</span>
+    ) : (
+      <span className="text-red-500 font-bold">↑</span>
+    );
+  };
 
-  if (loading) return <div className="text-xs text-slate-500 animate-pulse">Loading watchlist...</div>;
-  if (!assets.length) return <div className="text-xs text-slate-500 italic">No assets available.</div>;
+  const getRiskColor = (index: number) => {
+    if (index > 90) return 'text-red-500';
+    if (index > 80) return 'text-red-400';
+    return 'text-amber-400';
+  };
 
   return (
-    <div className="flex flex-col gap-1 overflow-y-auto pr-2">
-      {assets.map(a => (
-        <div key={a.id} className="flex justify-between items-center bg-slate-800/40 p-1.5 rounded border border-slate-700/50">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-bold text-slate-300">{a.name}</span>
-            <span className="text-[9px] text-slate-500">{a.type}</span>
+    <div className="flex flex-col w-full h-full text-[11px]">
+      <div className="flex justify-between items-center text-[10px] text-slate-400 border-b border-slate-700/50 pb-2 mb-2 font-bold tracking-wider uppercase">
+        <span className="flex-[1.5]">Asset</span>
+        <span className="flex-1 text-center">Type</span>
+        <span className="w-12 text-center">Risk</span>
+        <span className="w-12 text-center">Target</span>
+      </div>
+      <div className="flex flex-col gap-1 overflow-y-auto pr-1 pb-2">
+        {HACKATHON_TOP_RISKS.map(a => (
+          <div key={a.id} className="flex justify-between items-center py-1 border-b border-slate-800/50 last:border-0">
+            <span className="flex-[1.5] font-extrabold text-slate-200 truncate pr-2">
+              {a.event.replace(' escalation', '').replace(' export controls', ' Controls').replace(' shipping disruption', ' Shipping')}
+            </span>
+            <span className="flex-1 text-slate-300 text-center font-extrabold">{getAssetType(a.id)}</span>
+            <span className={`w-12 text-center font-mono font-extrabold ${getRiskColor(a.index)}`}>{a.index}</span>
+            <span className="w-12 text-center text-[12px] font-extrabold">{getTargetArrow(a.id)}</span>
           </div>
-          <span className="text-[9px] font-mono text-amber-500">Vol: {a.capacity}</span>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -144,8 +166,8 @@ export default function WarRoom() {
         <div className="bg-[#182227] rounded-md border border-slate-700/50 p-4 shadow-sm flex flex-col gap-4">
           <div className="flex justify-between items-start">
             <div>
-              <h3 className="text-[11px] font-bold tracking-wider text-slate-400 mb-1">RISK INDEX</h3>
-              <div className="flex items-baseline gap-1">
+              <h3 className="text-[11px] font-bold tracking-wider text-blue-200/80 drop-shadow-sm mb-1">RISK INDEX</h3>
+              <div className="flex items-baseline gap-1 drop-shadow-[0_0_10px_rgba(255,255,255,0.15)]">
                 {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
                   <>
                     <span className="text-4xl font-light text-red-400">86</span>
@@ -206,8 +228,8 @@ export default function WarRoom() {
 
         {/* TOP EXPOSURES */}
         <div className="bg-[#182227] rounded-md border border-slate-700/50 p-4 flex-1 min-h-[220px] flex flex-col">
-          <h3 className="text-[11px] font-bold tracking-wider text-slate-400 mb-1 uppercase">Top Exposures</h3>
-          <p className="text-[10px] text-slate-500 mb-4">By Risk Contribution</p>
+          <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-1 uppercase">Top Exposures</h3>
+          <p className="text-[10px] font-bold text-slate-400 mb-4">By Risk Contribution</p>
           <div className="flex-1">
             <RiskExposures entityId={activeEntityId} />
           </div>
@@ -215,8 +237,7 @@ export default function WarRoom() {
 
         {/* WATCHLIST */}
         <div className="bg-[#182227] rounded-md border border-slate-700/50 p-4 flex-1 min-h-[220px] flex flex-col">
-          <h3 className="text-[11px] font-bold tracking-wider text-slate-400 mb-1 uppercase">Watchlist</h3>
-          <p className="text-[10px] text-slate-500 mb-3">(At Risk Assets)</p>
+          <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-2 uppercase">WATCHLIST <span className="normal-case text-[10px] text-slate-400 font-bold">(At Risk Assets)</span></h3>
           <div className="flex-1">
             <WatchlistList />
           </div>
@@ -227,16 +248,14 @@ export default function WarRoom() {
       <div className="flex-1 flex flex-col gap-3 min-w-0">
         
         {/* KPI ROW */}
-        <div className="flex gap-3 h-[80px]">
-          <KPICard title="SYSTEMIC RISK INDEX" value={overview?.systemic_risk || "--"} max="100" status={overview?.status === "ok" ? (overview.systemic_risk > 70 ? "Elevated" : "Moderate") : "DATA UNAVAILABLE"} statusColor={overview?.systemic_risk > 70 ? "text-red-400" : "text-slate-400"} chart />
-          <KPICard title="SUPPLY STRESS LEVEL" value={overview?.supply_stress ? `${overview.supply_stress}%` : "--"} status={overview?.supply_stress > 30 ? "High" : (overview?.supply_stress ? "Moderate" : "DATA UNAVAILABLE")} statusColor="text-amber-400" chart />
-          <div className="flex-1 rounded-md overflow-hidden flex">
-            {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
-              <KPICard title="RESERVE COVERAGE (India)" value="9.8" unit="Days" status="Below Target" statusColor="text-red-400" chart />
+        <div className="flex gap-3 min-h-[90px]">
+          <KPICard title="SYSTEMIC RISK INDEX" value={overview?.systemic_risk || "--"} max="100" status={overview?.status === "ok" ? (overview.systemic_risk > 70 ? "Elevated" : "Moderate") : "DATA UNAVAILABLE"} statusColor={overview?.systemic_risk > 70 ? "text-red-400" : "text-slate-400"} chartType="up-red" />
+          <KPICard title="SUPPLY STRESS LEVEL" value={overview?.supply_stress ? `${overview.supply_stress}%` : "--"} status={overview?.supply_stress > 30 ? "High" : (overview?.supply_stress ? "Moderate" : "DATA UNAVAILABLE")} statusColor="text-amber-400" chartType="up-amber" />
+          {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
+              <KPICard title="RESERVE COVERAGE (India)" value="9.8" unit="Days" status="Below Target" statusColor="text-red-400" chartType="down-red" />
             ) : (
               <UnavailableData label="RESERVE COVERAGE" />
             )}
-          </div>
         </div>
 
         {/* MAIN MAP */}
@@ -264,30 +283,20 @@ export default function WarRoom() {
         </div>
 
         {/* BOTTOM SECTION */}
-        <div className="flex gap-3 h-[140px]">
-          <div className="flex-1 bg-[#182227] rounded-md overflow-hidden flex flex-col">
-            <UnavailableData label="SUPPLY CHAIN STATUS" />
+        <div className="flex flex-col gap-3 h-[170px]">
+          <div className="flex-[0.55] bg-[#182227] rounded-md border border-slate-700/50 p-3 flex flex-col">
+            <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-2 uppercase">SUPPLY CHAIN STATUS OVERVIEW</h3>
+            <div className="flex-1 overflow-hidden">
+              <SupplyChainStatusOverview />
+            </div>
           </div>
           
-          <div className="w-[400px] bg-[#182227] rounded-md border border-slate-700/50 p-3 flex flex-col">
-            <h3 className="text-[11px] font-bold tracking-wider text-slate-400 mb-2 uppercase flex items-center gap-2">
-              Global News Feed
-            </h3>
-            <div className="flex-1 overflow-y-auto pr-2">
-              {overview?.recent_events && overview.recent_events.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {overview.recent_events.map((ev: any) => (
-                    <div key={ev.id} className="text-[10px] text-slate-300 border-b border-slate-800/50 pb-2">
-                      <span className="text-red-400 font-bold">[{ev.type}]</span> {ev.location} - Severity: {ev.severity.toFixed(2)}
-                      <div className="text-[8px] text-slate-500 mt-1">{new Date(ev.timestamp).toLocaleString()}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <ActiveEventsList />
-              )}
+          <div className="flex-[0.45] bg-[#182227] rounded-md border border-slate-700/50 px-3 py-2 flex flex-col justify-center">
+            <h3 className="text-[10px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-1 uppercase">GLOBAL NEWS FEED</h3>
+            <div className="flex-1 overflow-hidden">
+              <GlobalNewsFeedHorizontal />
+            </div>
           </div>
-        </div>
         </div>
 
       </div>
@@ -297,60 +306,53 @@ export default function WarRoom() {
         
         {/* PRICING SNAPSHOT */}
         <div className="bg-[#182227] rounded-md h-[120px] p-3 flex flex-col border border-slate-700/50">
-          <h3 className="text-[10px] font-bold tracking-wider text-slate-400 mb-2 uppercase">PRICING SNAPSHOT (USD)</h3>
+          <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-2 uppercase">PRICING SNAPSHOT (USD)</h3>
           {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
-            <div className="flex flex-col gap-1 text-[10px] text-slate-300">
-              <div className="flex justify-between"><span className="text-slate-400">Brent Crude</span><span>64.82 <span className="text-emerald-400 ml-1">+2.35%</span></span></div>
-              <div className="flex justify-between"><span className="text-slate-400">WTI Crude</span><span>61.47 <span className="text-emerald-400 ml-1">+2.18%</span></span></div>
-              <div className="flex justify-between"><span className="text-slate-400">LNG (JKM)</span><span>12.34 <span className="text-emerald-400 ml-1">+1.92%</span></span></div>
-              <div className="flex justify-between"><span className="text-slate-400">Coal (API2)</span><span>104.6 <span className="text-red-400 ml-1">-0.45%</span></span></div>
+            <div className="flex flex-col gap-1 text-[11px]">
+              <div className="flex justify-between"><span className="text-slate-200 font-bold">Brent Crude</span><span className="font-mono font-bold text-white">64.82 <span className="text-emerald-400 ml-1">+2.35%</span></span></div>
+              <div className="flex justify-between"><span className="text-slate-200 font-bold">WTI Crude</span><span className="font-mono font-bold text-white">61.47 <span className="text-emerald-400 ml-1">+2.18%</span></span></div>
+              <div className="flex justify-between"><span className="text-slate-200 font-bold">LNG (JKM)</span><span className="font-mono font-bold text-white">12.34 <span className="text-emerald-400 ml-1">+1.92%</span></span></div>
+              <div className="flex justify-between"><span className="text-slate-200 font-bold">Coal (API2)</span><span className="font-mono font-bold text-white">104.6 <span className="text-red-400 ml-1">-0.45%</span></span></div>
             </div>
           ) : <UnavailableData label="" />}
         </div>
 
         {/* SYSTEM STATUS */}
         <div className="bg-[#182227] rounded-md h-[120px] p-3 flex flex-col border border-slate-700/50">
-          <h3 className="text-[10px] font-bold tracking-wider text-slate-400 mb-2 uppercase">SYSTEM STATUS</h3>
+          <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-2 uppercase">SYSTEM STATUS</h3>
           {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
-            <div className="flex flex-col gap-1 text-[10px] text-slate-300">
-              <div className="flex justify-between items-center"><span className="flex items-center gap-1 text-slate-400"><Globe size={10}/> Geopolitical Risk</span><span className="text-red-400 font-mono">72 ↑</span></div>
-              <div className="flex justify-between items-center"><span className="flex items-center gap-1 text-slate-400"><Package size={10}/> Logistics Risk</span><span className="text-amber-400 font-mono">61 →</span></div>
-              <div className="flex justify-between items-center"><span className="flex items-center gap-1 text-slate-400"><Database size={10}/> Supply Risk</span><span className="text-emerald-400 font-mono">42 ↓</span></div>
-              <div className="flex justify-between items-center"><span className="flex items-center gap-1 text-slate-400"><Activity size={10}/> Market Risk</span><span className="text-emerald-400 font-mono">32 ↓</span></div>
+            <div className="flex flex-col gap-1 text-[11px] font-bold text-slate-300">
+              <div className="flex justify-between items-center"><span className="flex items-center gap-2"><Globe size={12}/> Geopolitical Risk</span><span className="text-red-400 font-mono font-bold">72 ↑</span></div>
+              <div className="flex justify-between items-center"><span className="flex items-center gap-2"><Package size={12}/> Logistics Risk</span><span className="text-amber-400 font-mono font-bold">61 →</span></div>
+              <div className="flex justify-between items-center"><span className="flex items-center gap-2"><Database size={12}/> Supply Risk</span><span className="text-emerald-400 font-mono font-bold">42 ↓</span></div>
+              <div className="flex justify-between items-center"><span className="flex items-center gap-2"><Activity size={12}/> Market Risk</span><span className="text-emerald-400 font-mono font-bold">32 ↓</span></div>
             </div>
           ) : <UnavailableData label="" />}
         </div>
 
         {/* RISK HEATMAP */}
         <div className="bg-[#182227] rounded-md flex-1 min-h-[150px] p-3 flex flex-col border border-slate-700/50">
-          <h3 className="text-[10px] font-bold tracking-wider text-slate-400 mb-2 uppercase">RISK HEATMAP <span className="normal-case text-slate-500">(By Region)</span></h3>
+          <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-2 uppercase">RISK HEATMAP <span className="normal-case text-slate-400 text-[10px] font-bold">(By Region)</span></h3>
           {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
-             <div className="flex-1 flex flex-col items-center justify-center opacity-70">
-                <Globe className="h-16 w-16 text-slate-600 mb-2" />
-                <div className="flex gap-2 text-[8px] font-bold text-slate-400">
-                  <span className="flex items-center gap-1"><div className="w-2 h-2 bg-red-500 rounded-sm"></div> Very High</span>
-                  <span className="flex items-center gap-1"><div className="w-2 h-2 bg-amber-500 rounded-sm"></div> High</span>
-                  <span className="flex items-center gap-1"><div className="w-2 h-2 bg-emerald-500 rounded-sm"></div> Low</span>
-                </div>
+             <div className="flex-1 w-full h-full relative overflow-hidden rounded mt-1">
+                <img 
+                  src="/risk-map-cropped.png" 
+                  alt="Risk Heatmap" 
+                  className="w-full h-full object-contain opacity-90 hover:opacity-100 transition-opacity" 
+                />
              </div>
           ) : <UnavailableData label="" />}
         </div>
 
         {/* GLOBAL SUPPLY BALANCE */}
         <div className="bg-[#182227] rounded-md flex-1 min-h-[150px] p-3 flex flex-col border border-slate-700/50">
-          <h3 className="text-[10px] font-bold tracking-wider text-slate-400 mb-2 uppercase">GLOBAL SUPPLY BALANCE <span className="normal-case text-slate-500">(M bbl)</span></h3>
+          <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-2 uppercase">GLOBAL SUPPLY BALANCE <span className="normal-case text-slate-400 text-[10px] font-bold">(Mton)</span></h3>
           {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
-             <div className="flex-1 flex items-end gap-1 pt-4">
-                {Array.from({length: 15}).map((_, i) => (
-                  <div key={i} className="flex-1 bg-slate-700/50 rounded-t relative hover:bg-slate-600 transition-colors" style={{ height: `${40 + Math.sin(i)*10 + (i > 10 ? -20 : 0)}%`}}>
-                     {i > 10 && <div className="absolute top-0 left-0 w-full bg-red-500/50 rounded-t" style={{ height: '20px' }}></div>}
-                  </div>
-                ))}
-             </div>
+             <GlobalSupplyBalanceChart />
           ) : <UnavailableData label="" />}
         </div>
         
-        <div className="bg-[#182227] rounded-md h-[120px]">
+        <div className="bg-[#182227] rounded-md min-h-[150px] p-3 border border-slate-700/50">
           <SystemHealthComponent />
         </div>
 
@@ -363,44 +365,149 @@ export default function WarRoom() {
 function RiskItem({ label, value, trend, severity }: any) {
   const getSeverityStyles = (sev: string) => {
     switch (sev) {
-      case 'HIGH': return { wrapper: 'border-slate-700/50 border-l-red-500 bg-red-950/20', text: 'text-red-400' };
-      case 'MEDIUM': return { wrapper: 'border-slate-700/50 border-l-amber-500 bg-amber-950/20', text: 'text-amber-400' };
-      case 'LOW': return { wrapper: 'border-slate-700/50 border-l-emerald-500 bg-emerald-950/20', text: 'text-emerald-400' };
-      default: return { wrapper: 'border-slate-700/50 border-l-slate-500 bg-slate-900/50', text: 'text-slate-400' };
+      case 'HIGH': return { wrapper: 'border-slate-700/50 border-l-red-500 bg-red-950/20', text: 'text-red-400', glow: 'drop-shadow-[0_0_8px_rgba(248,113,113,0.6)]' };
+      case 'MEDIUM': return { wrapper: 'border-slate-700/50 border-l-amber-500 bg-amber-950/20', text: 'text-amber-400', glow: 'drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' };
+      case 'LOW': return { wrapper: 'border-slate-700/50 border-l-emerald-500 bg-emerald-950/20', text: 'text-emerald-400', glow: 'drop-shadow-[0_0_8px_rgba(52,211,153,0.6)]' };
+      default: return { wrapper: 'border-slate-700/50 border-l-slate-500 bg-slate-900/50', text: 'text-slate-400', glow: 'drop-shadow-[0_0_5px_rgba(148,163,184,0.5)]' };
     }
   };
   const styles = getSeverityStyles(severity);
 
   return (
     <div className={`p-3 rounded-md border-y border-r border-l-[3px] flex flex-col gap-1.5 ${styles.wrapper}`}>
-      <span className="text-[11px] text-slate-200 font-medium line-clamp-1" title={label}>{label}</span>
-      <div className="flex items-center gap-1.5 font-sans">
-        <span className={`text-xl font-medium ${styles.text}`}>{value}</span>
-        {trend === 'UP' && <TrendingUp size={14} className={styles.text} />}
-        {trend === 'DOWN' && <TrendingDown size={14} className={styles.text} />}
-        {trend === 'RIGHT' && <span className={`text-sm ${styles.text}`}>→</span>}
-        <span className={`text-[10px] uppercase font-bold tracking-wider opacity-80 ${styles.text}`}>({severity})</span>
+      <span className="text-[12px] text-white font-bold tracking-wide drop-shadow-[0_0_6px_rgba(255,255,255,0.4)] line-clamp-1" title={label}>{label}</span>
+      <div className={`flex items-center gap-1.5 font-sans ${styles.glow}`}>
+        <span className={`text-2xl font-bold ${styles.text}`}>{value}</span>
+        {trend === 'UP' && <TrendingUp size={16} className={styles.text} />}
+        {trend === 'DOWN' && <TrendingDown size={16} className={styles.text} />}
+        {trend === 'RIGHT' && <span className={`text-sm font-bold ${styles.text}`}>→</span>}
+        <span className={`text-[10px] uppercase font-black tracking-wider ${styles.text}`}>({severity})</span>
       </div>
     </div>
   );
 }
 
-function KPICard({ title, value, unit, status, statusColor, max, chart }: any) {
+function SupplyChainStatusOverview() {
+  return (
+    <div className="flex items-center justify-between h-full px-2 w-full">
+      <div className="flex flex-col items-center gap-1.5">
+        <div className="flex items-center gap-2">
+           <div className="w-5 h-5 rounded-full bg-emerald-950/40 border border-emerald-500/50 flex items-center justify-center text-emerald-500"><Activity size={10}/></div>
+           <span className="text-[11px] text-slate-200 font-bold">Production</span>
+        </div>
+        <span className="text-emerald-500 font-bold text-[10px]">Stable</span>
+      </div>
+      <span className="text-slate-500">→</span>
+      
+      <div className="flex flex-col items-center gap-1.5">
+        <div className="flex items-center gap-2">
+           <div className="w-5 h-5 rounded-full bg-amber-950/40 border border-amber-500/50 flex items-center justify-center text-amber-500"><TrendingDown size={10}/></div>
+           <span className="text-[11px] text-slate-200 font-bold">Transportation</span>
+        </div>
+        <span className="text-amber-500 font-bold text-[10px]">At Risk</span>
+      </div>
+      <span className="text-slate-500">→</span>
+      
+      <div className="flex flex-col items-center gap-1.5">
+        <div className="flex items-center gap-2">
+           <div className="w-5 h-5 rounded-full bg-red-950/40 border border-red-500/50 flex items-center justify-center text-red-500"><AlertTriangle size={10}/></div>
+           <span className="text-[11px] text-slate-200 font-bold">Ports & Terminals</span>
+        </div>
+        <span className="text-red-500 font-bold text-[10px]">Disrupted</span>
+      </div>
+      <span className="text-slate-500">→</span>
+      
+      <div className="flex flex-col items-center gap-1.5">
+        <div className="flex items-center gap-2">
+           <div className="w-5 h-5 rounded-full bg-emerald-950/40 border border-emerald-500/50 flex items-center justify-center text-emerald-500"><Activity size={10}/></div>
+           <span className="text-[11px] text-slate-200 font-bold">Refining</span>
+        </div>
+        <span className="text-emerald-500 font-bold text-[10px]">Stable</span>
+      </div>
+      <span className="text-slate-500">→</span>
+
+      <div className="flex flex-col items-center gap-1.5">
+        <div className="flex items-center gap-2">
+           <div className="w-5 h-5 rounded-full bg-emerald-950/40 border border-emerald-500/50 flex items-center justify-center text-emerald-500"><Package size={10}/></div>
+           <span className="text-[11px] text-slate-200 font-bold">Distribution</span>
+        </div>
+        <span className="text-emerald-500 font-bold text-[10px]">Stable</span>
+      </div>
+      <span className="text-slate-500">→</span>
+
+      <div className="flex flex-col items-center gap-1.5">
+        <div className="flex items-center gap-2">
+           <div className="w-5 h-5 rounded-full bg-amber-950/40 border border-amber-500/50 flex items-center justify-center text-amber-500"><Clock size={10}/></div>
+           <span className="text-[11px] text-slate-200 font-bold">End Demand</span>
+        </div>
+        <span className="text-amber-500 font-bold text-[10px]">Moderate</span>
+      </div>
+    </div>
+  );
+}
+
+function GlobalNewsFeedHorizontal() {
+  const news = [
+    { time: '3h ago', text: 'US increases pressure on Iran on exports with new sanctions.', source: 'Reuters' },
+    { time: '3h ago', text: 'Tanker demurrage rates in Red Sea reach 38%.', source: 'Bloomberg' },
+    { time: '4h ago', text: 'West Africa ports face severe congestion.', source: 'Platts' },
+    { time: '5h ago', text: 'OPEC+ confirms output adjustment in June.', source: 'CNBC' },
+    { time: '6h ago', text: 'Asia LNG prices spike amid supply uncertainty.', source: 'Energy Connects' },
+  ];
+  return (
+    <div className="flex gap-4 items-center overflow-x-auto no-scrollbar w-full h-full pb-1">
+      {news.map((n, i) => (
+        <div key={i} className="flex flex-col min-w-[200px] border-r border-slate-700/50 pr-4 last:border-0 h-full justify-center">
+           <div className="flex items-start gap-2 mb-1">
+              <span className="text-[10px] text-slate-400 whitespace-nowrap pt-0.5">{n.time}</span>
+              <span className="text-[10px] font-bold text-slate-200 leading-tight flex-1">{n.text}</span>
+           </div>
+           <span className="text-[9px] text-slate-500 text-left pl-10">{n.source}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const sysRiskData = [20, 25, 22, 30, 28, 35, 40, 32, 45, 50, 48, 55, 60, 58, 65].map((v, i) => ({ value: v }));
+const supplyStressData = [10, 15, 12, 18, 15, 22, 20, 25, 22, 28, 25, 30, 28, 32, 30].map((v, i) => ({ value: v }));
+const reserveCovData = [40, 45, 42, 38, 40, 35, 38, 32, 35, 30, 28, 32, 25, 20, 22].map((v, i) => ({ value: v }));
+
+function Sparkline({ data, color }: { data: any[], color: string }) {
+  const colorId = color.replace('#', '');
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id={`color-${colorId}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor={color} stopOpacity={0.6}/>
+            <stop offset="95%" stopColor={color} stopOpacity={0}/>
+          </linearGradient>
+        </defs>
+        <Area type="monotone" dataKey="value" stroke={color} strokeWidth={1.5} fillOpacity={1} fill={`url(#color-${colorId})`} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+function KPICard({ title, value, unit, status, statusColor, max, chartType }: any) {
   return (
     <div className="bg-[#182227] flex-1 rounded-md border border-slate-700/50 p-3 shadow-sm flex flex-col justify-between">
-      <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">{title}</h3>
+      <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] uppercase">{title}</h3>
       <div className="flex justify-between items-end mt-1">
         <div>
           <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-medium text-slate-200">{value}</span>
-            {max && <span className="text-xs text-slate-500">/{max}</span>}
-            {unit && <span className="text-xs text-slate-400">{unit}</span>}
+            <span className="text-2xl font-bold text-white">{value}</span>
+            {max && <span className="text-xs font-bold text-slate-400">/{max}</span>}
+            {unit && <span className="text-xs font-bold text-slate-400">{unit}</span>}
           </div>
-          <div className={`text-[10px] font-medium ${statusColor}`}>{status}</div>
+          <div className={`text-[11px] font-bold tracking-wide mt-1 ${statusColor}`}>{status}</div>
         </div>
-        {chart && (
-          <div className="w-16 h-8 opacity-50">
-            {/* Sparkline placeholder for metrics */}
+        {chartType && (
+          <div className="w-24 h-10 opacity-90 pb-1">
+            {chartType === 'up-red' && <Sparkline data={sysRiskData} color="#f97316" />}
+            {chartType === 'up-amber' && <Sparkline data={supplyStressData} color="#fbbf24" />}
+            {chartType === 'down-red' && <Sparkline data={reserveCovData} color="#3b82f6" />}
           </div>
         )}
       </div>

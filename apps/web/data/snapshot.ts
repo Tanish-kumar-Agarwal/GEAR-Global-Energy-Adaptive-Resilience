@@ -77,3 +77,16 @@ export const HACKATHON_MAP_ROUTES = [
     alternativePath: [[131.9, 43.1], [140.0, 35.0], [130.0, 20.0], [120.0, 5.0], [100.0, -5.0], [72.8, 19.0]] // Vladivostok Far East Route
   }
 ];
+
+export const HACKATHON_SUPPLY_BALANCE = [
+  { date: 'May 18', Supply: 112, Demand: 76, AtRisk: 42 },
+  { date: 'May 19', Supply: 110, Demand: 74, AtRisk: 44 },
+  { date: 'May 20', Supply: 114, Demand: 78, AtRisk: 50 },
+  { date: 'May 21', Supply: 111, Demand: 73, AtRisk: 41 },
+  { date: 'May 22', Supply: 116, Demand: 80, AtRisk: 49 },
+  { date: 'May 23', Supply: 112, Demand: 72, AtRisk: 39 },
+  { date: 'May 24', Supply: 118, Demand: 76, AtRisk: 40 },
+  { date: 'May 25', Supply: 115, Demand: 74, AtRisk: 48 },
+  { date: 'May 26', Supply: 111, Demand: 78, AtRisk: 35 },
+  { date: 'May 27', Supply: 113, Demand: 79, AtRisk: 42 },
+];

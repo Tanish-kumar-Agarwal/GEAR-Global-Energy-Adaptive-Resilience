@@ -26,27 +26,27 @@ export function SystemHealthComponent() {
   };
 
   return (
-    <div className="flex flex-col gap-2 p-3 text-[10px] text-slate-300 h-full">
-      <h3 className="font-bold tracking-wider text-slate-400 uppercase border-b border-slate-700 pb-1 mb-1">System Health</h3>
-      <div className="flex justify-between">
-        <span>API</span>
-        <span className="text-emerald-400 font-mono">HEALTHY</span>
+    <div className="flex flex-col gap-2 p-1 text-[11px] text-slate-300 h-full">
+      <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] uppercase border-b border-slate-700/50 pb-2 mb-1">SYSTEM HEALTH</h3>
+      <div className="flex justify-between items-center">
+        <span className="font-bold">API</span>
+        <span className="text-emerald-400 font-mono font-bold text-[10px]">HEALTHY</span>
       </div>
-      <div className="flex justify-between">
-        <span>POSTGRESQL</span>
-        <span className={`font-mono uppercase ${getStatusColor(comps.postgresql)}`}>{comps.postgresql || 'UNAVAILABLE'}</span>
+      <div className="flex justify-between items-center">
+        <span className="font-bold">POSTGRESQL</span>
+        <span className={`font-mono font-bold text-[10px] uppercase ${getStatusColor(comps.postgresql)}`}>{comps.postgresql || 'UNAVAILABLE'}</span>
       </div>
-      <div className="flex justify-between">
-        <span>NEO4J</span>
-        <span className={`font-mono uppercase ${getStatusColor(comps.neo4j)}`}>{comps.neo4j || 'UNAVAILABLE'}</span>
+      <div className="flex justify-between items-center">
+        <span className="font-bold">NEO4J</span>
+        <span className={`font-mono font-bold text-[10px] uppercase ${getStatusColor(comps.neo4j)}`}>{comps.neo4j || 'UNAVAILABLE'}</span>
       </div>
-      <div className="flex justify-between">
-        <span>REDIS</span>
-        <span className={`font-mono uppercase ${getStatusColor(comps.redis)}`}>{comps.redis || 'UNAVAILABLE'}</span>
+      <div className="flex justify-between items-center">
+        <span className="font-bold">REDIS</span>
+        <span className={`font-mono font-bold text-[10px] uppercase ${getStatusColor(comps.redis)}`}>{comps.redis || 'UNAVAILABLE'}</span>
       </div>
-      <div className="flex justify-between">
-        <span>CELERY</span>
-        <span className={`font-mono uppercase ${getStatusColor(comps.celery)}`}>{comps.celery || 'UNAVAILABLE'}</span>
+      <div className="flex justify-between items-center">
+        <span className="font-bold">CELERY</span>
+        <span className={`font-mono font-bold text-[10px] uppercase ${getStatusColor(comps.celery)}`}>{comps.celery || 'UNAVAILABLE'}</span>
       </div>
     </div>
   );

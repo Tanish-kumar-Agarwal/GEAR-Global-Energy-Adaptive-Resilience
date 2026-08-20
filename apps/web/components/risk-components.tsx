@@ -9,8 +9,8 @@ import {
   ExplainabilityResponse
 } from '@/types';
 import { DATA_MODE } from '@/lib/config';
-import { HACKATHON_EXPOSURES } from '@/data/snapshot';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { HACKATHON_EXPOSURES, HACKATHON_SUPPLY_BALANCE } from '@/data/snapshot';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 
 export function RiskTrendChart({ entityId }: { entityId?: string }) {
   const [data, setData] = useState<RiskTrendPoint[]>([]);
@@ -108,12 +108,12 @@ export function RiskExposures({ entityId }: { entityId: string }) {
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <div className="w-1/2 flex flex-col gap-1.5 pl-2 justify-center">
+        <div className="w-1/2 flex flex-col gap-2 pl-2 justify-center">
           {HACKATHON_EXPOSURES.map(e => (
-            <div key={e.name} className="flex items-center text-[9px] text-slate-300">
-              <div className="w-2 h-2 rounded-full mr-2 shrink-0" style={{ backgroundColor: e.fill }} />
+            <div key={e.name} className="flex items-center text-[11px] font-bold tracking-wide text-slate-200">
+              <div className="w-2.5 h-2.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: e.fill }} />
               <span className="truncate flex-1">{e.name}</span>
-              <span className="font-mono text-slate-400 ml-1">{e.value}%</span>
+              <span className="font-mono font-bold text-white ml-1">{e.value}%</span>
             </div>
           ))}
         </div>
@@ -330,6 +330,48 @@ export function RiskEvaluationSummary() {
            Most severe active event: <span className="font-bold">{data.highest_severity_event}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+export function GlobalSupplyBalanceChart() {
+  return (
+    <div className="w-full h-full min-h-[100px] pt-2">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={HACKATHON_SUPPLY_BALANCE} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+          <XAxis 
+            dataKey="date" 
+            stroke="#64748b" 
+            fontSize={9} 
+            tickLine={false} 
+            axisLine={false}
+            tick={{ fill: '#94a3b8' }}
+          />
+          <YAxis 
+            stroke="#64748b" 
+            fontSize={9} 
+            tickLine={false} 
+            axisLine={false}
+            ticks={[0, 50, 100, 120]}
+            domain={[0, 120]}
+            tick={{ fill: '#94a3b8' }}
+          />
+          <Tooltip 
+            contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', fontSize: '10px' }}
+            itemStyle={{ color: '#e2e8f0' }}
+            labelStyle={{ color: '#94a3b8' }}
+          />
+          <Legend 
+            wrapperStyle={{ fontSize: '10px', paddingTop: '5px' }}
+            iconType="plainline"
+            iconSize={12}
+          />
+          <Line type="monotone" dataKey="Supply" stroke="#22c55e" strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="Demand" stroke="#3b82f6" strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="AtRisk" name="At Risk" stroke="#ef4444" strokeWidth={2} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }

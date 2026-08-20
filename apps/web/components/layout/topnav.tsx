@@ -127,16 +127,23 @@ export function TopNav() {
 function Tab({ href, icon, title, sub, active }: any) {
   return (
     <Link href={href}>
-      <div className={`h-full flex flex-col justify-center px-6 border-r border-[#182227] border-t-2 transition-colors cursor-pointer ${
+      <div className={`h-full flex flex-col justify-center px-6 border-r border-[#182227] border-t-2 transition-all cursor-pointer ${
         active 
           ? 'bg-slate-800/50 border-t-blue-500' 
           : 'border-t-transparent hover:bg-slate-800/30'
       }`}>
         <div className={`flex items-center gap-2 ${active ? 'text-blue-400' : 'text-slate-400'}`}>
-          {icon}
-          <span className="text-[11px] font-bold tracking-wide uppercase">{title}</span>
+          <div className={active ? 'drop-shadow-[0_0_8px_rgba(96,165,250,0.8)]' : ''}>
+            {icon}
+          </div>
+          <span 
+            className={`text-[12px] font-black tracking-wider uppercase ${active ? 'text-blue-300' : ''}`}
+            style={active ? { textShadow: '0 0 10px rgba(96, 165, 250, 0.8), 0 0 20px rgba(96, 165, 250, 0.4)' } : undefined}
+          >
+            {title}
+          </span>
         </div>
-        <div className={`text-[10px] pl-6 ${active ? 'text-slate-300' : 'text-slate-500'}`}>
+        <div className={`text-[10px] pl-6 font-medium ${active ? 'text-slate-200' : 'text-slate-500'}`}>
           {sub}
         </div>
       </div>
