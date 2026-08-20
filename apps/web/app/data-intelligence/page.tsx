@@ -320,8 +320,8 @@ export default function DataIntelligencePage() {
               <div className="relative w-48 h-24 overflow-hidden mb-4">
                  <svg viewBox="0 0 100 50" className="w-full h-full drop-shadow-md">
                    <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#233138" strokeWidth="12" strokeLinecap="round" />
-                   <path d="M 10 50 A 40 40 0 0 1 85 20" fill="none" stroke="#10b981" strokeWidth="12" strokeLinecap="round" />
-                   <path d="M 10 50 A 40 40 0 0 1 30 15" fill="none" stroke="#f59e0b" strokeWidth="12" strokeLinecap="round" className="opacity-0" /> {/* Just for ref */}
+                   <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#10b981" strokeWidth="12" strokeLinecap="round" pathLength="100" strokeDasharray="87 100" />
+                   <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#f59e0b" strokeWidth="12" strokeLinecap="round" pathLength="100" strokeDasharray="50 100" className="opacity-0" /> {/* Just for ref */}
                  </svg>
                  <div className="absolute bottom-0 inset-x-0 flex flex-col items-center justify-end">
                    <div className="text-4xl font-bold text-white flex items-baseline gap-1">
