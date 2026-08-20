@@ -11,7 +11,8 @@ import {
   RiskExposureResponse,
   RiskEvaluationResponse,
   IntelligenceEventsResponse,
-  ExplainabilityResponse
+  ExplainabilityResponse,
+  DataIntelligenceSourcesResponse
 } from '../types';
 
 import { DATA_MODE } from './config';
@@ -161,6 +162,10 @@ export class ApiClient {
   // Intelligence
   static async getIntelligenceEvents(limit: number = 5): Promise<IntelligenceEventsResponse> {
     return this.request<IntelligenceEventsResponse>(`/intelligence/events?limit=${limit}`);
+  }
+
+  static async getDataIntelligenceSources(): Promise<DataIntelligenceSourcesResponse> {
+    return this.request<DataIntelligenceSourcesResponse>('/intelligence/data-sources');
   }
 
   static async getIntelligenceExplainability(riskId: string): Promise<ExplainabilityResponse> {

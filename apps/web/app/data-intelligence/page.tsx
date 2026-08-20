@@ -1,47 +1,24 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, BarChart, Bar, Label, AreaChart, Area 
 } from 'recharts';
 import { CheckCircle2, AlertTriangle, XCircle, Clock, Server, Cpu, HardDrive } from 'lucide-react';
+import { ApiClient } from '@/lib/api';
+import { DataIntelligenceSource } from '@/types';
 
-const sourcesData = [
-  { name: 'EIA', status: 'OK (Green)', statusColor: 'text-emerald-500', sync: 'Last Sync', time: '2021-07-13 19:39:56', records: '2.34M', rel: '95%', relColor: 'bg-emerald-500' },
-  { name: 'GEM', status: 'OK (Green)', statusColor: 'text-emerald-500', sync: 'Last Sync', time: '2021-07-13 19:29:53', records: '1.91M', rel: '95%', relColor: 'bg-emerald-500' },
-  { name: 'ACLED', status: 'Lagging', statusColor: 'text-amber-500', sync: 'Last Sync', time: '2021-07-21 23:27:17', records: '528K', rel: '86%', relColor: 'bg-amber-500' },
-  { name: 'GDELT', status: 'OK (Green)', statusColor: 'text-emerald-500', sync: 'Last Sync', time: '2021-07-17 23:29:19', records: '3.29M', rel: '86%', relColor: 'bg-emerald-500' },
-  { name: 'Open-Meteo', status: 'OK (Green)', statusColor: 'text-emerald-500', sync: 'Last Sync', time: '2021-07-17 20:35:17', records: '1.02M', rel: '86%', relColor: 'bg-emerald-500' },
-  { name: 'IEA (Baseline)', status: 'OK (Green)', statusColor: 'text-emerald-500', sync: 'Last Sync', time: '2021-07-19 11:30:08', records: '1.98M', rel: '86%', relColor: 'bg-emerald-500' },
-  { name: 'Comtrade', status: 'Lagging', statusColor: 'text-amber-500', sync: 'Last Sync', time: '2021-07-13 11:34:12', records: '615K', rel: '86%', relColor: 'bg-amber-500' },
-  { name: 'World Bank', status: 'Error', statusColor: 'text-red-500', sync: 'Last Sync', time: '2021-07-18 22:23:35', records: '0', rel: '86%', relColor: 'bg-red-500' },
-];
-
-const ingestionData = Array.from({ length: 24 }).map((_, i) => ({
-  time: `${i.toString().padStart(2, '0')}:00`,
-  ingested: 500000 + Math.random() * 1500000 + (Math.sin(i / 3) * 500000),
-  processed: 450000 + Math.random() * 1400000 + (Math.sin(i / 3) * 450000),
-}));
-
-const healthData = [
-  { name: 'Healthy', value: 19, color: '#10b981' },
-  { name: 'Warning', value: 3, color: '#f59e0b' },
-  { name: 'Critical', value: 2, color: '#ef4444' },
+const staticSourcesData: DataIntelligenceSource[] = [
+  { name: 'ACLED', status: 'Lagging', statusColor: 'text-amber-500', sync: 'Last Sync', time: '2021-07-21 23:27:17', records: '528K', metricValue: 0, rel: '86%', relColor: 'bg-amber-500' },
+  { name: 'IEA (Baseline)', status: 'OK (Green)', statusColor: 'text-emerald-500', sync: 'Last Sync', time: '2021-07-19 11:30:08', records: '1.98M', metricValue: 0, rel: '86%', relColor: 'bg-emerald-500' },
+  { name: 'Comtrade', status: 'Lagging', statusColor: 'text-amber-500', sync: 'Last Sync', time: '2021-07-13 11:34:12', records: '615K', metricValue: 0, rel: '86%', relColor: 'bg-amber-500' },
 ];
 
 const failureData = [
   { name: 'Source Timeout', value: 2, fill: '#ef4444' },
   { name: 'Data Validation', value: 1, fill: '#f59e0b' },
   { name: 'Processing Error', value: 1, fill: '#f59e0b' },
-];
-
-const topPipelines = [
-  { name: 'EIA Pipeline', value: 2.84 },
-  { name: 'GDELT Pipeline', value: 2.31 },
-  { name: 'Open-Meteo Pipeline', value: 1.92 },
-  { name: 'IEA Pipeline', value: 1.78 },
-  { name: 'GEM Pipeline', value: 1.14 },
 ];
 
 const alertsData = [
@@ -53,6 +30,42 @@ const alertsData = [
 const sparklineData = Array.from({ length: 15 }).map(() => ({ value: Math.random() * 100 }));
 
 export default function DataIntelligencePage() {
+  const [liveSources, setLiveSources] = useState<DataIntelligenceSource[]>([]);
+
+  useEffect(() => {
+    ApiClient.getDataIntelligenceSources()
+      .then((response) => setLiveSources(response.sources))
+      .catch(() => setLiveSources([]));
+  }, []);
+
+  const sourcesData = [...liveSources, ...staticSourcesData];
+  const healthySources = liveSources.filter((source) => source.status === 'OK (Green)').length;
+  const failedSources = liveSources.filter((source) => source.status === 'Error').length;
+  const sourceMetricValue = (source: DataIntelligenceSource) => {
+    const value = Number(source.metricValue);
+    if (Number.isFinite(value) && value > 0) return value;
+
+    // Supports a backend that has returned the live source summary but has not
+    // yet been restarted with the metricValue field.
+    const fallback = Number(source.records.match(/[\d,.]+/)?.[0]?.replace(/,/g, ''));
+    return Number.isFinite(fallback) ? fallback : 0;
+  };
+  const totalLiveRecords = liveSources.reduce((total, source) => total + sourceMetricValue(source), 0);
+  const liveVolumeData = liveSources.map((source) => ({
+    source: source.name,
+    ingested: sourceMetricValue(source),
+    processed: source.status === 'OK (Green)' ? sourceMetricValue(source) : 0,
+  }));
+  const liveHealthData = [
+    { name: 'Healthy', value: healthySources, color: '#10b981' },
+    { name: 'Critical', value: failedSources, color: '#ef4444' },
+  ];
+  const topPipelines = [...liveSources]
+    .sort((left, right) => sourceMetricValue(right) - sourceMetricValue(left))
+    .map((source) => ({ name: `${source.name} Pipeline`, value: sourceMetricValue(source) }));
+  const maxPipelineValue = Math.max(...topPipelines.map((pipeline) => pipeline.value), 1);
+  const latestSync = liveSources[0]?.time ?? 'Waiting for backend';
+
   return (
     <div className="flex flex-col min-h-full bg-[#0f181b] text-slate-300 p-4 font-sans">
       
@@ -84,7 +97,7 @@ export default function DataIntelligencePage() {
               <div className="w-16 text-center">Source<br/>Reliability</div>
             </div>
             
-            <div className="flex-1 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1 custom-scrollbar">
               {sourcesData.map((s, i) => (
                 <div key={i} className="flex items-center text-[11px] hover:bg-[#233138]/50 py-2 px-2 rounded transition-colors border-b border-[#233138]/50 last:border-0">
                   <div className="flex-1 flex flex-col">
@@ -93,6 +106,7 @@ export default function DataIntelligencePage() {
                       <span className={`w-1.5 h-1.5 rounded-full ${s.statusColor.replace('text-', 'bg-')}`}></span>
                       {s.status}
                     </span>
+                    {s.detail && <span className="text-[9px] text-slate-500 mt-0.5 truncate" title={s.detail}>{s.detail}</span>}
                   </div>
                   <div className="w-20 text-center text-slate-400">{s.sync}</div>
                   <div className="w-24 text-center text-slate-400 font-mono text-[10px]">{s.time.replace(' ', '\n')}</div>
@@ -112,6 +126,25 @@ export default function DataIntelligencePage() {
                 <div className="flex-1 text-center text-slate-600">—</div>
               </div>
             </div>
+
+            <div className="mt-3 border-t border-[#233138] pt-3">
+              <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-2">Live API Snapshot</h3>
+              {liveSources.length === 0 ? (
+                <div className="text-[10px] text-slate-500">Fetching EIA, World Bank, GDELT, Open-Meteo, and GEM…</div>
+              ) : (
+                <div className="space-y-2">
+                  {liveSources.map((source) => (
+                    <div key={source.name} className="rounded border border-[#233138] bg-[#131d21] px-2 py-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-semibold text-slate-200">{source.name}</span>
+                        <span className={`text-[10px] ${source.statusColor}`}>{source.records}</span>
+                      </div>
+                      <p className="mt-0.5 text-[9px] leading-snug text-slate-500 line-clamp-2">{source.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -123,59 +156,59 @@ export default function DataIntelligencePage() {
              <h2 className="text-xs font-bold text-slate-300 tracking-wider mb-3 uppercase">Pipeline & Processing Overview</h2>
              <div className="grid grid-cols-5 gap-3">
                 <div className="bg-[#1c272c] border border-[#233138] rounded p-3 flex flex-col justify-between">
-                  <span className="text-[10px] text-slate-400">Total Pipelines</span>
+                  <span className="text-[10px] text-slate-400">Live Sources</span>
                   <div>
-                    <div className="text-2xl font-semibold text-slate-200">24</div>
-                    <div className="text-xs text-emerald-500">Active</div>
+                    <div className="text-2xl font-semibold text-slate-200">{liveSources.length || '—'}</div>
+                    <div className="text-xs text-emerald-500">Backend fed</div>
                   </div>
                 </div>
                 <div className="bg-[#1c272c] border border-[#233138] rounded p-3 flex flex-col justify-between relative overflow-hidden">
-                  <span className="text-[10px] text-slate-400">Pipeline Success Rate</span>
+                  <span className="text-[10px] text-slate-400">Fetch Success Rate</span>
                   <div className="flex items-end justify-between z-10 relative">
                     <div className="w-10 h-10 border-4 border-emerald-500 rounded-full border-r-emerald-900/30"></div>
                     <div className="text-right">
-                      <div className="text-lg font-semibold text-emerald-400">98.6%</div>
-                      <div className="text-[10px] text-slate-500">24h avg</div>
+                      <div className="text-lg font-semibold text-emerald-400">{liveSources.length ? `${Math.round((healthySources / liveSources.length) * 100)}%` : '—'}</div>
+                      <div className="text-[10px] text-slate-500">live status</div>
                     </div>
                   </div>
                 </div>
                 <div className="bg-[#1c272c] border border-[#233138] rounded p-3 flex flex-col justify-between">
-                  <span className="text-[10px] text-slate-400">Avg. Ingestion Latency</span>
+                  <span className="text-[10px] text-slate-400">Source Records</span>
                   <div className="flex items-end justify-between">
                     <div>
-                      <div className="text-lg font-semibold text-emerald-400">12.4 min</div>
-                      <div className="text-[10px] text-slate-500">24h avg</div>
+                      <div className="text-lg font-semibold text-emerald-400">{liveSources.length ? totalLiveRecords.toLocaleString() : '—'}</div>
+                      <div className="text-[10px] text-slate-500">returned by APIs</div>
                     </div>
                   </div>
                   <div className="h-6 w-full mt-1">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={sparklineData}>
-                        <Line type="monotone" dataKey="value" stroke="#10b981" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                      <LineChart data={liveVolumeData}>
+                        <Line type="monotone" dataKey="ingested" stroke="#10b981" strokeWidth={1.5} dot={false} isAnimationActive={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
                 <div className="bg-[#1c272c] border border-[#233138] rounded p-3 flex flex-col justify-between">
-                  <span className="text-[10px] text-slate-400">Avg. Processing Time</span>
+                  <span className="text-[10px] text-slate-400">Last Backend Sync</span>
                   <div className="flex items-end justify-between">
                     <div>
-                      <div className="text-lg font-semibold text-emerald-400">18.7 sec</div>
-                      <div className="text-[10px] text-slate-500">24h avg</div>
+                      <div className="text-xs font-semibold text-emerald-400 leading-tight">{latestSync}</div>
+                      <div className="text-[10px] text-slate-500">UTC</div>
                     </div>
                   </div>
                   <div className="h-6 w-full mt-1">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={sparklineData}>
-                        <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                      <LineChart data={liveVolumeData}>
+                        <Line type="monotone" dataKey="processed" stroke="#3b82f6" strokeWidth={1.5} dot={false} isAnimationActive={false} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
                 <div className="bg-[#1c272c] border border-[#233138] rounded p-3 flex flex-col justify-between">
-                  <span className="text-[10px] text-slate-400">Failed Pipelines</span>
+                  <span className="text-[10px] text-slate-400">Failed Sources</span>
                   <div>
-                    <div className="text-2xl font-semibold text-red-500">3</div>
-                    <div className="text-xs text-slate-500">Last 24h</div>
+                    <div className="text-2xl font-semibold text-red-500">{liveSources.length ? failedSources : '—'}</div>
+                    <div className="text-xs text-slate-500">Current fetch</div>
                   </div>
                 </div>
                 <div className="bg-[#1c272c] border border-[#233138] rounded p-3 flex flex-col justify-between">
@@ -196,15 +229,15 @@ export default function DataIntelligencePage() {
           {/* Ingestion Volume */}
           <div className="bg-[#182227] border border-[#233138] rounded-md p-4 relative flex flex-col min-h-[220px]">
              <div className="flex justify-between items-center mb-4">
-               <h2 className="text-xs font-bold text-slate-300 tracking-wider uppercase">Ingestion Volume (Records)</h2>
+             <h2 className="text-xs font-bold text-slate-300 tracking-wider uppercase">Live Source Response Volume</h2>
                <div className="flex gap-4 text-[10px]">
-                 <div className="flex items-center gap-1.5"><span className="w-2 h-0.5 bg-emerald-500"></span> Ingested</div>
-                 <div className="flex items-center gap-1.5"><span className="w-2 h-0.5 bg-blue-500"></span> Processed</div>
+                 <div className="flex items-center gap-1.5"><span className="w-2 h-0.5 bg-emerald-500"></span> Returned</div>
+                 <div className="flex items-center gap-1.5"><span className="w-2 h-0.5 bg-blue-500"></span> Available</div>
                </div>
              </div>
              <div className="flex-1 -ml-4">
                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={ingestionData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                  <AreaChart data={liveVolumeData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorIng" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
@@ -216,8 +249,8 @@ export default function DataIntelligencePage() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#233138" vertical={false} />
-                    <XAxis dataKey="time" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} minTickGap={30} />
-                    <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v/1000000).toFixed(1)}M`} />
+                    <XAxis dataKey="source" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} tickMargin={10} minTickGap={10} />
+                    <YAxis stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
                     <Tooltip contentStyle={{ backgroundColor: '#182227', borderColor: '#233138', fontSize: '12px', color: '#cbd5e1' }} itemStyle={{ color: '#e2e8f0' }}/>
                     <Area type="monotone" dataKey="ingested" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorIng)" />
                     <Area type="monotone" dataKey="processed" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorPro)" />
@@ -234,18 +267,18 @@ export default function DataIntelligencePage() {
                  <div className="w-[120px] h-[120px] relative">
                    <ResponsiveContainer width="100%" height="100%">
                      <PieChart>
-                       <Pie data={healthData} cx="50%" cy="50%" innerRadius={40} outerRadius={55} paddingAngle={2} dataKey="value" stroke="none">
-                         {healthData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                       <Pie data={liveHealthData} cx="50%" cy="50%" innerRadius={40} outerRadius={55} paddingAngle={2} dataKey="value" stroke="none">
+                         {liveHealthData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                        </Pie>
                      </PieChart>
                    </ResponsiveContainer>
                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                     <span className="text-xl font-bold text-slate-200">24</span>
-                     <span className="text-[10px] text-slate-500">Total</span>
+                     <span className="text-xl font-bold text-slate-200">{liveSources.length || '—'}</span>
+                     <span className="text-[10px] text-slate-500">Live</span>
                    </div>
                  </div>
                  <div className="flex flex-col gap-2 flex-1 ml-4">
-                   {healthData.map((d, i) => (
+                   {liveHealthData.map((d, i) => (
                      <div key={i} className="flex items-center justify-between text-xs">
                        <div className="flex items-center gap-2">
                          <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: d.color }}></span>
@@ -253,7 +286,7 @@ export default function DataIntelligencePage() {
                        </div>
                        <div className="flex items-center gap-2">
                          <span className="text-slate-300">{d.value}</span>
-                         <span className="text-slate-500 text-[10px] w-8 text-right">({Math.round((d.value/24)*100)}%)</span>
+                         <span className="text-slate-500 text-[10px] w-8 text-right">({liveSources.length ? Math.round((d.value / liveSources.length) * 100) : 0}%)</span>
                        </div>
                      </div>
                    ))}
@@ -341,15 +374,15 @@ export default function DataIntelligencePage() {
           </div>
 
           <div className="bg-[#182227] border border-[#233138] rounded-md p-4 flex flex-col flex-1 min-h-[220px]">
-            <h2 className="text-xs font-bold text-slate-300 tracking-wider mb-4 uppercase">Top Pipelines by Volume <span className="text-slate-500 normal-case">(Last 24h)</span></h2>
+            <h2 className="text-xs font-bold text-slate-300 tracking-wider mb-4 uppercase">Live Sources by Response Volume</h2>
             <div className="flex-1 flex flex-col justify-center space-y-4">
               {topPipelines.map((p, i) => (
                 <div key={i} className="flex items-center text-xs">
                   <div className="w-4 text-slate-500">{i+1}</div>
                   <div className="w-32 text-slate-300">{p.name}</div>
                   <div className="flex-1 ml-2 flex items-center">
-                    <div className="h-2 rounded bg-emerald-500 mr-2" style={{width: `${(p.value/3)*100}%`}}></div>
-                    <div className="text-slate-400 text-[10px] w-8">{p.value}M</div>
+                    <div className="h-2 rounded bg-emerald-500 mr-2" style={{width: `${(p.value / maxPipelineValue) * 100}%`}}></div>
+                    <div className="text-slate-400 text-[10px] w-12 text-right">{p.value.toLocaleString()}</div>
                   </div>
                 </div>
               ))}

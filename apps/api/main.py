@@ -5,9 +5,11 @@ from sqlalchemy.exc import SQLAlchemyError
 import logging
 import os
 import sys
+from dotenv import load_dotenv
 
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, root_dir)
+load_dotenv(os.path.join(root_dir, ".env"))
 
 from core.logging import setup_logging
 setup_logging()

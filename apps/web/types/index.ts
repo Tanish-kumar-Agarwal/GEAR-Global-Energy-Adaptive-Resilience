@@ -94,6 +94,23 @@ export interface IntelligenceEventsResponse {
   data: IntelligenceEvent[];
 }
 
+export interface DataIntelligenceSource {
+  name: string;
+  status: string;
+  statusColor: string;
+  sync: string;
+  time: string;
+  records: string;
+  metricValue: number;
+  rel: string;
+  relColor: string;
+  detail?: string;
+}
+
+export interface DataIntelligenceSourcesResponse {
+  sources: DataIntelligenceSource[];
+}
+
 export interface RiskExposureEntity {
   id: string;
   name: string;

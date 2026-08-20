@@ -2,7 +2,6 @@ from .celery_app import celery_app
 from core.database import SessionLocal
 from models.domain import Job, JobStatus, TradeFlow, Route, EnergyAsset, DecisionAudit, Country, Scenario
 from simulation.monte_carlo.runner import run_monte_carlo
-from optimization.procurement import optimize_procurement
 import logging
 from datetime import datetime, timezone
 import uuid
@@ -139,7 +138,9 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
             for dest, dem in dest_demands.items()
         ]
 
-        # 3. Run optimizer
+        # 3. Run optimizer. Imported here so optional native solver libraries do
+        # not prevent the API or other background tasks from starting.
+        from optimization.procurement import optimize_procurement
         opt_result = optimize_procurement(final_routes, reserves, destinations, duration_days)
 
         if opt_result["status"] != "completed":
