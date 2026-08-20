@@ -3,9 +3,12 @@
 import { useEffect, useState } from 'react';
 import { Activity, AlertTriangle, Package, Map as MapIcon, Globe, ShieldAlert, TrendingUp, TrendingDown, Clock, Database } from 'lucide-react';
 import { RiskTrendChart, RiskExposures, ActiveEventsList } from '@/components/risk-components';
+import { SystemHealthComponent } from '@/components/system-health';
 import { MapViewer } from '@/components/map-viewer';
 import { ApiClient } from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import { DATA_MODE } from '@/lib/config';
+import { HACKATHON_TOP_RISKS, HACKATHON_WORLD_OVERVIEW } from '@/data/snapshot';
 
 function UnavailableData({ label }: { label: string }) {
   return (
@@ -143,7 +146,12 @@ export default function WarRoom() {
             <div>
               <h3 className="text-[11px] font-bold tracking-wider text-slate-400 mb-1">RISK INDEX</h3>
               <div className="flex items-baseline gap-1">
-                {riskEval?.status === 'data_unavailable' ? (
+                {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
+                  <>
+                    <span className="text-4xl font-light text-red-400">86</span>
+                    <span className="text-sm font-medium text-slate-500">/100</span>
+                  </>
+                ) : riskEval?.status === 'data_unavailable' ? (
                   <span className="text-xl font-medium text-slate-500">UNAVAILABLE</span>
                 ) : (
                   <>
@@ -154,22 +162,44 @@ export default function WarRoom() {
                   </>
                 )}
               </div>
-              <span className="text-sm font-medium text-emerald-400">
-                {riskEval && riskEval.status !== 'data_unavailable' ? (riskEval.systemic_risk_score > 70 ? 'High' : 'Moderate') : ''}
+              <span className="text-sm font-medium text-red-400">
+                {DATA_MODE === 'HACKATHON_SNAPSHOT' ? 'High' : (riskEval && riskEval.status !== 'data_unavailable' ? (riskEval.systemic_risk_score > 70 ? 'High' : 'Moderate') : '')}
               </span>
             </div>
               <RiskTrendChart entityId={activeEntityId} />
           </div>
           
-          <div className="flex flex-col gap-2">
-            {riskEval?.status === 'data_unavailable' ? (
-               <div className="text-[10px] text-slate-500 italic p-2 border border-slate-700/50 rounded">No active risks documented in backend</div>
+          <div className="flex flex-col gap-2 mt-2">
+            {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
+              <div className="flex flex-col gap-2 h-full overflow-y-auto no-scrollbar pb-2">
+                {HACKATHON_TOP_RISKS.map((risk, i) => {
+                  let severity = 'HIGH';
+                  let trend = 'UP';
+                  if (risk.index < 80) { severity = 'MEDIUM'; trend = 'RIGHT'; }
+                  if (risk.index > 90) trend = 'UP';
+                  else if (risk.index === 82) trend = 'DOWN';
+                  
+                  return (
+                    <RiskItem 
+                      key={risk.id}
+                      label={risk.event}
+                      value={risk.index}
+                      trend={trend}
+                      severity={severity}
+                    />
+                  );
+                })}
+              </div>
             ) : (
-              <>
-                <RiskItem label="Active Critical Risks" value={riskEval?.active_critical_risks ?? "--"} trend="UP" severity="HIGH" />
-                <RiskItem label="Active High Risks" value={riskEval?.active_high_risks ?? "--"} trend="RIGHT" severity="MEDIUM" />
-                <RiskItem label="Total Monitored Events" value={riskEval?.event_count ?? "--"} trend="RIGHT" severity="LOW" />
-              </>
+              riskEval?.status === 'data_unavailable' ? (
+                 <div className="text-[10px] text-slate-500 italic p-2 border border-slate-700/50 rounded">No active risks documented in backend</div>
+              ) : (
+                <>
+                  <RiskItem label="Active Critical Risks" value={riskEval?.active_critical_risks ?? "--"} trend="UP" severity="HIGH" />
+                  <RiskItem label="Active High Risks" value={riskEval?.active_high_risks ?? "--"} trend="RIGHT" severity="MEDIUM" />
+                  <RiskItem label="Total Monitored Events" value={riskEval?.event_count ?? "--"} trend="RIGHT" severity="LOW" />
+                </>
+              )
             )}
           </div>
         </div>
@@ -198,10 +228,14 @@ export default function WarRoom() {
         
         {/* KPI ROW */}
         <div className="flex gap-3 h-[80px]">
-          <KPICard title="SYSTEMIC RISK INDEX" value={overview?.systemic_risk || "--"} max="100" status={overview?.status || "DATA UNAVAILABLE"} statusColor="text-slate-400" chart />
-          <KPICard title="SUPPLY STRESS LEVEL" value={overview?.supply_stress ? `${overview.supply_stress}%` : "--"} status={overview?.supply_stress ? "Computed" : "DATA UNAVAILABLE"} statusColor="text-slate-400" chart />
+          <KPICard title="SYSTEMIC RISK INDEX" value={overview?.systemic_risk || "--"} max="100" status={overview?.status === "ok" ? (overview.systemic_risk > 70 ? "Elevated" : "Moderate") : "DATA UNAVAILABLE"} statusColor={overview?.systemic_risk > 70 ? "text-red-400" : "text-slate-400"} chart />
+          <KPICard title="SUPPLY STRESS LEVEL" value={overview?.supply_stress ? `${overview.supply_stress}%` : "--"} status={overview?.supply_stress > 30 ? "High" : (overview?.supply_stress ? "Moderate" : "DATA UNAVAILABLE")} statusColor="text-amber-400" chart />
           <div className="flex-1 rounded-md overflow-hidden flex">
-            <UnavailableData label="RESERVE COVERAGE" />
+            {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
+              <KPICard title="RESERVE COVERAGE (India)" value="9.8" unit="Days" status="Below Target" statusColor="text-red-400" chart />
+            ) : (
+              <UnavailableData label="RESERVE COVERAGE" />
+            )}
           </div>
         </div>
 
@@ -221,7 +255,7 @@ export default function WarRoom() {
             // if we have assets, just select the first one to demonstrate interaction
             if (assets.length > 0 && !selectedAsset) setSelectedAsset(assets[0]);
           }}>
-             {assets.length > 0 ? <MapViewer assets={assets} /> : <div className="animate-pulse">Loading map...</div>}
+             {DATA_MODE === 'HACKATHON_SNAPSHOT' || assets.length > 0 ? <MapViewer assets={assets} /> : <div className="animate-pulse">Loading map...</div>}
           </div>
 
           {selectedAsset && (
@@ -262,28 +296,62 @@ export default function WarRoom() {
       <div className="w-[300px] flex flex-col gap-3 flex-shrink-0 overflow-y-auto no-scrollbar">
         
         {/* PRICING SNAPSHOT */}
-        <div className="bg-[#182227] rounded-md h-[120px]">
-          <UnavailableData label="PRICING SNAPSHOT" />
+        <div className="bg-[#182227] rounded-md h-[120px] p-3 flex flex-col border border-slate-700/50">
+          <h3 className="text-[10px] font-bold tracking-wider text-slate-400 mb-2 uppercase">PRICING SNAPSHOT (USD)</h3>
+          {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
+            <div className="flex flex-col gap-1 text-[10px] text-slate-300">
+              <div className="flex justify-between"><span className="text-slate-400">Brent Crude</span><span>64.82 <span className="text-emerald-400 ml-1">+2.35%</span></span></div>
+              <div className="flex justify-between"><span className="text-slate-400">WTI Crude</span><span>61.47 <span className="text-emerald-400 ml-1">+2.18%</span></span></div>
+              <div className="flex justify-between"><span className="text-slate-400">LNG (JKM)</span><span>12.34 <span className="text-emerald-400 ml-1">+1.92%</span></span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Coal (API2)</span><span>104.6 <span className="text-red-400 ml-1">-0.45%</span></span></div>
+            </div>
+          ) : <UnavailableData label="" />}
         </div>
 
         {/* SYSTEM STATUS */}
-        <div className="bg-[#182227] rounded-md h-[120px]">
-          <UnavailableData label="RISK CATEGORIES" />
+        <div className="bg-[#182227] rounded-md h-[120px] p-3 flex flex-col border border-slate-700/50">
+          <h3 className="text-[10px] font-bold tracking-wider text-slate-400 mb-2 uppercase">SYSTEM STATUS</h3>
+          {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
+            <div className="flex flex-col gap-1 text-[10px] text-slate-300">
+              <div className="flex justify-between items-center"><span className="flex items-center gap-1 text-slate-400"><Globe size={10}/> Geopolitical Risk</span><span className="text-red-400 font-mono">72 ↑</span></div>
+              <div className="flex justify-between items-center"><span className="flex items-center gap-1 text-slate-400"><Package size={10}/> Logistics Risk</span><span className="text-amber-400 font-mono">61 →</span></div>
+              <div className="flex justify-between items-center"><span className="flex items-center gap-1 text-slate-400"><Database size={10}/> Supply Risk</span><span className="text-emerald-400 font-mono">42 ↓</span></div>
+              <div className="flex justify-between items-center"><span className="flex items-center gap-1 text-slate-400"><Activity size={10}/> Market Risk</span><span className="text-emerald-400 font-mono">32 ↓</span></div>
+            </div>
+          ) : <UnavailableData label="" />}
         </div>
 
         {/* RISK HEATMAP */}
-        <div className="bg-[#182227] rounded-md flex-1 min-h-[150px]">
-          <UnavailableData label="RISK HEATMAP" />
+        <div className="bg-[#182227] rounded-md flex-1 min-h-[150px] p-3 flex flex-col border border-slate-700/50">
+          <h3 className="text-[10px] font-bold tracking-wider text-slate-400 mb-2 uppercase">RISK HEATMAP <span className="normal-case text-slate-500">(By Region)</span></h3>
+          {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
+             <div className="flex-1 flex flex-col items-center justify-center opacity-70">
+                <Globe className="h-16 w-16 text-slate-600 mb-2" />
+                <div className="flex gap-2 text-[8px] font-bold text-slate-400">
+                  <span className="flex items-center gap-1"><div className="w-2 h-2 bg-red-500 rounded-sm"></div> Very High</span>
+                  <span className="flex items-center gap-1"><div className="w-2 h-2 bg-amber-500 rounded-sm"></div> High</span>
+                  <span className="flex items-center gap-1"><div className="w-2 h-2 bg-emerald-500 rounded-sm"></div> Low</span>
+                </div>
+             </div>
+          ) : <UnavailableData label="" />}
         </div>
 
         {/* GLOBAL SUPPLY BALANCE */}
-        <div className="bg-[#182227] rounded-md flex-1 min-h-[200px]">
-          <UnavailableData label="GLOBAL SUPPLY BALANCE" />
+        <div className="bg-[#182227] rounded-md flex-1 min-h-[150px] p-3 flex flex-col border border-slate-700/50">
+          <h3 className="text-[10px] font-bold tracking-wider text-slate-400 mb-2 uppercase">GLOBAL SUPPLY BALANCE <span className="normal-case text-slate-500">(M bbl)</span></h3>
+          {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
+             <div className="flex-1 flex items-end gap-1 pt-4">
+                {Array.from({length: 15}).map((_, i) => (
+                  <div key={i} className="flex-1 bg-slate-700/50 rounded-t relative hover:bg-slate-600 transition-colors" style={{ height: `${40 + Math.sin(i)*10 + (i > 10 ? -20 : 0)}%`}}>
+                     {i > 10 && <div className="absolute top-0 left-0 w-full bg-red-500/50 rounded-t" style={{ height: '20px' }}></div>}
+                  </div>
+                ))}
+             </div>
+          ) : <UnavailableData label="" />}
         </div>
         
-        {/* SYSTEM LOGS SMALL */}
         <div className="bg-[#182227] rounded-md h-[120px]">
-          <UnavailableData label="SYSTEM HEALTH" />
+          <SystemHealthComponent />
         </div>
 
       </div>
@@ -293,24 +361,25 @@ export default function WarRoom() {
 }
 
 function RiskItem({ label, value, trend, severity }: any) {
-  const getSeverityColor = (sev: string) => {
+  const getSeverityStyles = (sev: string) => {
     switch (sev) {
-      case 'HIGH': return 'text-red-400 border-red-400/30 bg-red-400/10';
-      case 'MEDIUM': return 'text-amber-400 border-amber-400/30 bg-amber-400/10';
-      case 'LOW': return 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10';
-      default: return 'text-slate-400';
+      case 'HIGH': return { wrapper: 'border-slate-700/50 border-l-red-500 bg-red-950/20', text: 'text-red-400' };
+      case 'MEDIUM': return { wrapper: 'border-slate-700/50 border-l-amber-500 bg-amber-950/20', text: 'text-amber-400' };
+      case 'LOW': return { wrapper: 'border-slate-700/50 border-l-emerald-500 bg-emerald-950/20', text: 'text-emerald-400' };
+      default: return { wrapper: 'border-slate-700/50 border-l-slate-500 bg-slate-900/50', text: 'text-slate-400' };
     }
   };
+  const styles = getSeverityStyles(severity);
 
   return (
-    <div className={`p-2 rounded border flex items-center justify-between ${getSeverityColor(severity)}`}>
-      <span className="text-xs">{label}</span>
-      <div className="flex items-center gap-1 font-mono text-sm">
-        <span>{value}</span>
-        {trend === 'UP' && <TrendingUp size={12} />}
-        {trend === 'DOWN' && <TrendingDown size={12} />}
-        {trend === 'RIGHT' && <span className="text-[10px]">→</span>}
-        <span className="text-[9px] uppercase ml-1">({severity})</span>
+    <div className={`p-3 rounded-md border-y border-r border-l-[3px] flex flex-col gap-1.5 ${styles.wrapper}`}>
+      <span className="text-[11px] text-slate-200 font-medium line-clamp-1" title={label}>{label}</span>
+      <div className="flex items-center gap-1.5 font-sans">
+        <span className={`text-xl font-medium ${styles.text}`}>{value}</span>
+        {trend === 'UP' && <TrendingUp size={14} className={styles.text} />}
+        {trend === 'DOWN' && <TrendingDown size={14} className={styles.text} />}
+        {trend === 'RIGHT' && <span className={`text-sm ${styles.text}`}>→</span>}
+        <span className={`text-[10px] uppercase font-bold tracking-wider opacity-80 ${styles.text}`}>({severity})</span>
       </div>
     </div>
   );

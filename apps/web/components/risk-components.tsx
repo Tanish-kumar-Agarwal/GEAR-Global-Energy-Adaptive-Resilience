@@ -8,6 +8,9 @@ import {
   RiskEvaluationResponse,
   ExplainabilityResponse
 } from '@/types';
+import { DATA_MODE } from '@/lib/config';
+import { HACKATHON_EXPOSURES } from '@/data/snapshot';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
 export function RiskTrendChart({ entityId }: { entityId?: string }) {
   const [data, setData] = useState<RiskTrendPoint[]>([]);
@@ -77,6 +80,47 @@ export function RiskExposures({ entityId }: { entityId: string }) {
 
   if (loading) return <div className="animate-pulse text-xs text-slate-500">Loading exposures...</div>;
   if (error) return <div className="text-xs text-red-400">{error}</div>;
+
+  if (DATA_MODE === 'HACKATHON_SNAPSHOT') {
+    return (
+      <div className="flex h-full w-full items-center">
+        <div className="w-1/2 h-full min-h-[120px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={HACKATHON_EXPOSURES}
+                cx="50%"
+                cy="50%"
+                innerRadius={35}
+                outerRadius={50}
+                paddingAngle={2}
+                dataKey="value"
+                stroke="none"
+              >
+                {HACKATHON_EXPOSURES.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Pie>
+              <Tooltip 
+                contentStyle={{backgroundColor: '#0f172a', border: '1px solid #1e293b', fontSize: '10px'}} 
+                itemStyle={{color: '#e2e8f0'}}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="w-1/2 flex flex-col gap-1.5 pl-2 justify-center">
+          {HACKATHON_EXPOSURES.map(e => (
+            <div key={e.name} className="flex items-center text-[9px] text-slate-300">
+              <div className="w-2 h-2 rounded-full mr-2 shrink-0" style={{ backgroundColor: e.fill }} />
+              <span className="truncate flex-1">{e.name}</span>
+              <span className="font-mono text-slate-400 ml-1">{e.value}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (!data || data.status === 'data_unavailable') return <div className="text-xs text-slate-500">DATA UNAVAILABLE</div>;
 
   return (

@@ -1,7 +1,17 @@
 'use client';
 
 import React from 'react';
-import { RequiresAPI } from '@/components/ui/requires-api';
+function UnavailableData({ label }: { label: string }) {
+  return (
+    <div className="relative w-full h-full min-h-[100px] flex items-center justify-center overflow-hidden rounded-md bg-slate-900/40 border border-slate-800/60">
+      <div className="relative z-10 flex flex-col items-center justify-center p-4 text-center opacity-70">
+        <span className="text-[10px] font-mono text-slate-600 bg-slate-950/80 px-2 py-0.5 rounded border border-slate-800">
+          DATA UNAVAILABLE
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export default function DataIntelligencePage() {
   return (
@@ -26,7 +36,7 @@ export default function DataIntelligencePage() {
         <div className="col-span-12 xl:col-span-3 flex flex-col gap-4">
           <div className="bg-[#182227] border border-[#233138] rounded-md p-4 flex-1 flex flex-col relative overflow-hidden">
             <h2 className="text-xs font-bold text-slate-400 tracking-wider mb-4 uppercase">Source Management & Ingestion Status</h2>
-            <RequiresAPI endpoint="GET /api/v1/ingestion/sources" />
+            <UnavailableData label="SOURCE MANAGEMENT" />
           </div>
         </div>
 
@@ -37,32 +47,32 @@ export default function DataIntelligencePage() {
           <div className="bg-[#182227] border border-[#233138] rounded-md p-4 relative overflow-hidden">
              <h2 className="text-xs font-bold text-slate-400 tracking-wider mb-4 uppercase">Pipeline & Processing Overview</h2>
              <div className="h-[80px]">
-                <RequiresAPI endpoint="GET /api/v1/ingestion/kpis" />
+                <UnavailableData label="PIPELINE KPIS" />
              </div>
           </div>
 
           {/* Ingestion Volume */}
           <div className="bg-[#182227] border border-[#233138] rounded-md p-4 relative overflow-hidden h-[250px]">
              <h2 className="text-xs font-bold text-slate-400 tracking-wider mb-4 uppercase">Ingestion Volume (Records)</h2>
-             <RequiresAPI endpoint="GET /api/v1/ingestion/volume-timeseries" />
+             <UnavailableData label="INGESTION VOLUME" />
           </div>
 
           {/* Middle row split */}
           <div className="grid grid-cols-2 gap-4 flex-1">
             <div className="bg-[#182227] border border-[#233138] rounded-md p-4 relative overflow-hidden h-[180px]">
                <h2 className="text-xs font-bold text-slate-400 tracking-wider mb-4 uppercase">Pipeline Health Distribution</h2>
-               <RequiresAPI endpoint="GET /api/v1/ingestion/health-distribution" />
+               <UnavailableData label="HEALTH DISTRIBUTION" />
             </div>
             <div className="bg-[#182227] border border-[#233138] rounded-md p-4 relative overflow-hidden h-[180px]">
                <h2 className="text-xs font-bold text-slate-400 tracking-wider mb-4 uppercase">Failure Breakdown (Last 24h)</h2>
-               <RequiresAPI endpoint="GET /api/v1/ingestion/failures" />
+               <UnavailableData label="FAILURE BREAKDOWN" />
             </div>
           </div>
 
           {/* Bottom Alerts Table */}
           <div className="bg-[#182227] border border-[#233138] rounded-md p-4 relative overflow-hidden h-[200px]">
              <h2 className="text-xs font-bold text-slate-400 tracking-wider mb-4 uppercase">Recent Pipeline Alerts & Events</h2>
-             <RequiresAPI endpoint="GET /api/v1/ingestion/alerts" />
+             <UnavailableData label="PIPELINE ALERTS" />
           </div>
 
         </div>
@@ -72,17 +82,17 @@ export default function DataIntelligencePage() {
           
           <div className="bg-[#182227] border border-[#233138] rounded-md p-4 relative overflow-hidden h-[250px]">
             <h2 className="text-xs font-bold text-slate-400 tracking-wider mb-4 uppercase">Data Quality Score</h2>
-            <RequiresAPI endpoint="GET /api/v1/ingestion/quality" />
+            <UnavailableData label="DATA QUALITY" />
           </div>
 
           <div className="bg-[#182227] border border-[#233138] rounded-md p-4 relative overflow-hidden flex-1 min-h-[250px]">
             <h2 className="text-xs font-bold text-slate-400 tracking-wider mb-4 uppercase">Top Pipelines by Volume (Last 24h)</h2>
-            <RequiresAPI endpoint="GET /api/v1/ingestion/top-pipelines" />
+            <UnavailableData label="TOP PIPELINES" />
           </div>
 
           <div className="bg-[#182227] border border-[#233138] rounded-md p-4 relative overflow-hidden h-[150px]">
             <h2 className="text-xs font-bold text-slate-400 tracking-wider mb-4 uppercase">System Resources (Live)</h2>
-            <RequiresAPI endpoint="GET /api/v1/system/resources" />
+            <UnavailableData label="SYSTEM RESOURCES" />
           </div>
 
         </div>

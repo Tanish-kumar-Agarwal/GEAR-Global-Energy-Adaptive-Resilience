@@ -288,7 +288,7 @@ function ScenarioLabContent() {
                     </div>
                   </div>
                 ) : (
-                   <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 mt-6">Run simulation to generate probability distribution</div>
+                  <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 mt-6">Run simulation to generate probability distribution</div>
                 )}
              </div>
           </div>
@@ -312,7 +312,27 @@ function ScenarioLabContent() {
           
           <div className="bg-[#182227] rounded-md border border-slate-700/50 p-4 shadow-sm flex flex-col gap-4 relative min-h-[200px]">
             <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Key Impact Metrics <span className="normal-case text-slate-500">(30 Days)</span></h3>
-            <RequiresAPI endpoint="GET /api/v1/market/impact-metrics" />
+            {results?.impact ? (
+               <div className="flex flex-col gap-3">
+                 <div className="flex justify-between items-center border-b border-slate-800/50 pb-2">
+                   <div className="flex flex-col gap-1">
+                      <span className="text-xs text-slate-300">Global Supply Gap</span>
+                   </div>
+                   <div className="flex flex-col items-end">
+                      <span className="text-[10px] font-bold text-red-400">↑</span>
+                      <span className="text-xs font-mono text-slate-200">{results.impact.supply_gap} Mb/d</span>
+                   </div>
+                 </div>
+               </div>
+            ) : (
+               <div className="relative w-full h-full min-h-[100px] flex items-center justify-center overflow-hidden rounded-md bg-slate-900/40 border border-slate-800/60 mt-2">
+                  <div className="relative z-10 flex flex-col items-center justify-center p-4 text-center opacity-70">
+                    <span className="text-[10px] font-mono text-slate-600 bg-slate-950/80 px-2 py-0.5 rounded border border-slate-800">
+                      DATA UNAVAILABLE
+                    </span>
+                  </div>
+               </div>
+            )}
           </div>
 
           <div className="bg-[#182227] rounded-md border border-slate-700/50 p-4 shadow-sm relative overflow-hidden min-h-[140px]">
@@ -372,13 +392,42 @@ function ScenarioLabContent() {
                   </div>
                </div>
             ) : (
-               <RequiresAPI endpoint="GET /api/v1/market/economic-impact" />
+               <div className="relative w-full h-full min-h-[100px] flex items-center justify-center overflow-hidden rounded-md bg-slate-900/40 border border-slate-800/60 mt-2">
+                  <div className="relative z-10 flex flex-col items-center justify-center p-4 text-center opacity-70">
+                    <span className="text-[10px] font-mono text-slate-600 bg-slate-950/80 px-2 py-0.5 rounded border border-slate-800">
+                      DATA UNAVAILABLE
+                    </span>
+                  </div>
+               </div>
             )}
           </div>
 
           <div className="bg-[#182227] rounded-md border border-slate-700/50 p-4 shadow-sm relative overflow-hidden min-h-[180px] flex-1">
             <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-3">Affected Volumes <span className="normal-case text-slate-500">(30 Days)</span></h3>
-            <RequiresAPI endpoint="GET /api/v1/market/affected-volumes" />
+            {results?.graph_overlay ? (
+               <div className="flex flex-col gap-2 text-xs">
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-700/50">
+                     <span className="text-slate-400">Affected Trade Flows</span>
+                     <span className="text-amber-400 font-bold tracking-tight text-sm">
+                        {results.graph_overlay.blast_radius?.affected_trade_flows?.length || 0} Flows
+                     </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px]">
+                     <span className="text-slate-500">Downstream Exposed Assets</span>
+                     <span className="text-slate-300">
+                        {results.graph_overlay.blast_radius?.affected_assets?.length || 0} Facilities
+                     </span>
+                  </div>
+               </div>
+            ) : (
+               <div className="relative w-full h-full min-h-[100px] flex items-center justify-center overflow-hidden rounded-md bg-slate-900/40 border border-slate-800/60 mt-4">
+                  <div className="relative z-10 flex flex-col items-center justify-center p-4 text-center opacity-70">
+                    <span className="text-[10px] font-mono text-slate-600 bg-slate-950/80 px-2 py-0.5 rounded border border-slate-800">
+                      DATA UNAVAILABLE
+                    </span>
+                  </div>
+               </div>
+            )}
           </div>
 
           <div className="bg-[#182227] rounded-md border border-slate-700/50 p-4 shadow-sm">

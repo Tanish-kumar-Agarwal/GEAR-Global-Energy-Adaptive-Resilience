@@ -4,6 +4,18 @@ import { useState, useEffect } from 'react';
 import { Loader2, Search, Check, Download, Sliders, ChevronDown } from 'lucide-react';
 import { RequiresAPI } from '@/components/ui/requires-api';
 
+function UnavailableData({ label }: { label: string }) {
+  return (
+    <div className="relative w-full h-full min-h-[100px] flex items-center justify-center overflow-hidden rounded-md bg-slate-900/40 border border-slate-800/60">
+      <div className="relative z-10 flex flex-col items-center justify-center p-4 text-center opacity-70">
+        <span className="text-[10px] font-mono text-slate-600 bg-slate-950/80 px-2 py-0.5 rounded border border-slate-800">
+          DATA UNAVAILABLE
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function StrategyLab() {
   const [running, setRunning] = useState(false);
   const [strategyResult, setStrategyResult] = useState<any>(null);
@@ -153,7 +165,7 @@ export default function StrategyLab() {
            <div className="w-[40%] bg-[#182227] rounded-md border border-slate-700/50 p-4 relative flex flex-col">
               <h3 className="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-4">Strategic Pillar Execution</h3>
               {!strategyResult ? (
-                  <RequiresAPI endpoint="POST /api/v1/strategy/scenarios" />
+                  <div className="text-xs text-slate-500 mt-4 text-center">Run simulation to evaluate baseline overlays</div>
               ) : (
                   <div className="text-xs text-slate-300">
                       <div><span className="font-bold text-slate-400">Targeting Baseline:</span> {strategyResult.baseline_scenario_id}</div>
@@ -178,7 +190,7 @@ export default function StrategyLab() {
         <div className="flex-1 bg-[#182227] rounded-md border border-slate-700/50 p-4 relative flex flex-col min-h-[150px]">
            <h3 className="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-4">Affected Physical Entities</h3>
            {!strategyResult ? (
-               <RequiresAPI endpoint="GET /api/v1/strategy/scenarios/{id}" />
+               <div className="text-xs text-slate-500 mt-4 text-center">Run simulation to evaluate baseline overlays</div>
            ) : (
                <div className="flex gap-2 text-xs">
                    <div className="p-3 bg-slate-900 rounded border border-slate-700 flex-1">
@@ -197,7 +209,7 @@ export default function StrategyLab() {
               <div className="flex justify-between items-center mb-2">
                  <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Scenario Comparison</h3>
               </div>
-              <RequiresAPI endpoint="GET /api/v1/strategy/scenarios/{id}/comparison" />
+              <UnavailableData label="SCENARIO COMPARISON" />
            </div>
            <div className="w-[30%] bg-[#182227] rounded-md border border-slate-700/50 p-3 relative flex flex-col">
               <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-2">Strategic Assumptions</h3>

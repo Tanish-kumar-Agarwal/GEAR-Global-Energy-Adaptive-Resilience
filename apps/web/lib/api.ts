@@ -14,10 +14,21 @@ import {
   ExplainabilityResponse
 } from '../types';
 
+import { DATA_MODE } from './config';
+import * as snapshot from '../data/snapshot';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
 export class ApiClient {
   private static async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    
+    // HACKATHON SNAPSHOT INTERCEPTION
+    if (DATA_MODE === 'HACKATHON_SNAPSHOT') {
+       if (endpoint === '/world/overview') return snapshot.HACKATHON_WORLD_OVERVIEW as any;
+       if (endpoint === '/risks/evaluation') return snapshot.HACKATHON_RISK_EVALUATION as any;
+       if (endpoint.startsWith('/risks/trend')) return snapshot.HACKATHON_RISK_TREND as any;
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...((options?.headers as Record<string, string>) || {}),

@@ -6,7 +6,18 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { ApiClient } from '@/lib/api';
 import { MasterResponseObject } from '@/types';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { RequiresAPI } from '@/components/ui/requires-api';
+
+function UnavailableData({ label }: { label: string }) {
+  return (
+    <div className="relative w-full h-full min-h-[100px] flex items-center justify-center overflow-hidden rounded-md bg-slate-900/40 border border-slate-800/60">
+      <div className="relative z-10 flex flex-col items-center justify-center p-4 text-center opacity-70">
+        <span className="text-[10px] font-mono text-slate-600 bg-slate-950/80 px-2 py-0.5 rounded border border-slate-800">
+          DATA UNAVAILABLE
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function ResponseOrchestratorContent() {
   const searchParams = useSearchParams();
@@ -219,7 +230,7 @@ function ResponseOrchestratorContent() {
                       </div>
                     )}
                  </div>
-                 <RequiresAPI endpoint="GET /api/v1/optimization/strategy-scores" />
+                 <UnavailableData label="STRATEGY SCORES" />
               </div>
               
               <div className="h-32 bg-[#1e293b] rounded-md border border-slate-700/50 p-3 relative overflow-hidden">
@@ -227,7 +238,7 @@ function ResponseOrchestratorContent() {
                     <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Alternative Strategies Comparison</h3>
                     <div className="flex gap-2 text-[9px]"><span className="text-blue-400 underline">Tabular View</span><span className="text-slate-500">Chart View</span></div>
                  </div>
-                 <RequiresAPI endpoint="GET /api/v1/optimization/alternatives" />
+                 <UnavailableData label="ALTERNATIVES" />
               </div>
            </div>
 
@@ -287,7 +298,7 @@ function ResponseOrchestratorContent() {
 
            <div className="flex-1 bg-[#1e293b] rounded-md border border-slate-700/50 p-4 relative">
               <h3 className="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-4">Implementation Timeline</h3>
-              <RequiresAPI endpoint="GET /api/v1/optimization/timeline" />
+              <UnavailableData label="TIMELINE" />
            </div>
         </div>
 
@@ -332,12 +343,12 @@ function ResponseOrchestratorContent() {
 
         <div className="bg-[#1e293b] rounded-md border border-slate-700/50 p-4 shadow-sm relative overflow-hidden min-h-[140px]">
           <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-3">Economic Impact <span className="normal-case text-slate-500">(India)</span></h3>
-          <RequiresAPI endpoint="GET /api/v1/market/economic-impact" />
+          <UnavailableData label="ECONOMIC IMPACT" />
         </div>
 
         <div className="bg-[#1e293b] rounded-md border border-slate-700/50 p-4 shadow-sm relative overflow-hidden min-h-[180px] flex-1">
           <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-3">Affected Volumes <span className="normal-case text-slate-500">({durationDays} Days)</span></h3>
-          <RequiresAPI endpoint="GET /api/v1/market/affected-volumes" />
+          <UnavailableData label="AFFECTED VOLUMES" />
         </div>
 
         <div className="bg-[#1e293b] rounded-md border border-slate-700/50 flex items-center justify-between shadow-sm overflow-hidden shrink-0">
