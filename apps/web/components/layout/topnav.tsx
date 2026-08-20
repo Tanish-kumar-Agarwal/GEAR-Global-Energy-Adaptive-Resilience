@@ -81,6 +81,12 @@ export function TopNav() {
       
       {/* FAR RIGHT ITEMS */}
       <div className="flex items-center gap-6">
+        {process.env.NEXT_PUBLIC_GEAR_DATA_MODE === 'HACKATHON_SNAPSHOT' && (
+          <div className="hidden lg:flex flex-col text-right border-r border-[#182227] pr-6">
+            <span className="text-[10px] font-bold text-amber-500 tracking-widest uppercase">GEAR INTELLIGENCE SNAPSHOT</span>
+            <span className="text-[9px] text-amber-500/70">20 AUG 2026 | DATA MODE: HACKATHON</span>
+          </div>
+        )}
         <div className="flex flex-col text-right">
            <div className="flex items-center gap-2 justify-end relative group cursor-pointer">
              <div className={`w-2 h-2 rounded-full animate-pulse ${healthStatus === 'healthy' || healthStatus === 'ok' ? 'bg-emerald-500' : healthStatus === 'degraded' ? 'bg-yellow-500' : 'bg-red-500'}`}></div>

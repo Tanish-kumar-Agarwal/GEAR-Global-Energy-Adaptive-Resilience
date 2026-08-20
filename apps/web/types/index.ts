@@ -141,7 +141,13 @@ export interface MasterResponseObject {
     affected_routes: number;
     affected_assets: number;
     affected_countries: number;
+    risk_reduction?: string;
+    price_impact_oil?: string;
+    price_impact_lng?: string;
+    reserve_depletion?: string;
+    shipping_cost?: string;
   };
+  radar_data?: any[];
   options: {
     option_id: string;
     option_type: string;

@@ -45,7 +45,7 @@ function ResponseOrchestratorContent() {
   };
 
   const radarData = responseObj?.radar_data || [];
-  const pieData = responseObj?.confidence_breakdown || [];
+
 
   const target = responseObj?.problem?.target || 'Strait of Hormuz';
   const severity = responseObj?.problem?.severity || 0.7;
@@ -247,45 +247,42 @@ function ResponseOrchestratorContent() {
               </div>
               <div className="flex flex-1 gap-4">
                  {/* Left List */}
-                 <div className="w-1/2 flex flex-col gap-2 text-[10px] text-slate-300">
-                    <div className="flex gap-2 items-start"><CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" /> <span>Supplier diversification reduces concentration risk by 16%.</span></div>
-                    <div className="flex gap-2 items-start"><CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" /> <span>Route C has available capacity and lower geopolitical exposure.</span></div>
-                    <div className="flex gap-2 items-start"><CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" /> <span>Controlled reserve release minimizes price shock.</span></div>
-                    <div className="flex gap-2 items-start"><CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" /> <span>Refinery optimization maximizes output with available crude slate.</span></div>
+                 <div className="w-1/2 flex flex-col gap-2 text-[10px] text-slate-300 overflow-y-auto pr-2">
+                    {responseObj?.explanation?.causal_chain?.length > 0 ? responseObj?.explanation?.causal_chain?.map((link: any, idx: number) => (
+                      <div key={idx} className="flex gap-2 items-start">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" /> 
+                        <span>{link.cause} ➔ {link.effect}</span>
+                      </div>
+                    )) : (
+                      <div className="text-slate-500 text-center uppercase tracking-widest mt-4">Data Unavailable</div>
+                    )}
                  </div>
                  {/* Right Charts */}
                  <div className="w-1/2 flex gap-2">
-                    <div className="w-1/2 border-r border-slate-700/50 pr-2">
+                    <div className="w-1/2 border-r border-slate-700/50 pr-2 overflow-y-auto">
                        <h4 className="text-[9px] text-slate-500 uppercase mb-2">Evidence Sources</h4>
-                       {/* Mock list */}
-                       <div className="flex justify-between text-[9px] mb-1"><span className="text-slate-300">Geopolitical Events</span><span className="text-slate-500">12 sources</span></div>
-                       <div className="flex justify-between text-[9px] mb-1"><span className="text-slate-300">Shipping Intelligence</span><span className="text-slate-500">25 signals</span></div>
+                       {responseObj?.explanation?.evidence?.length > 0 ? responseObj?.explanation?.evidence?.map((ev: any, idx: number) => (
+                         <div key={idx} className="flex justify-between text-[9px] mb-1">
+                           <span className="text-slate-300 truncate pr-1" title={ev.field}>{ev.field}</span>
+                           <span className="text-slate-500">{String(ev.value)}</span>
+                         </div>
+                       )) : (
+                         <div className="text-[9px] text-slate-500 uppercase tracking-widest text-center mt-2">Data Unavailable</div>
+                       )}
                     </div>
                     <div className="w-1/2 relative flex flex-col items-center justify-center">
-                       <h4 className="text-[9px] text-slate-500 uppercase mb-2 text-center">Confidence Breakdown</h4>
-                       {pieData.length > 0 ? (
-                          <>
-                           <div className="h-20 w-20 mx-auto">
-                             <ResponsiveContainer width="100%" height="100%">
-                               <PieChart>
-                                 <Pie data={pieData} innerRadius={25} outerRadius={35} paddingAngle={2} dataKey="value" stroke="none">
-                                   {pieData.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                                 </Pie>
-                               </PieChart>
-                             </ResponsiveContainer>
-                           </div>
-                           <div className="absolute inset-0 flex flex-col items-center justify-center pt-5">
-                              <span className="text-sm font-bold text-white leading-none">78%</span>
-                              <span className="text-[6px] text-slate-500">Overall Confidence</span>
-                           </div>
-                          </>
-                        ) : (
-                          <div className="text-[10px] text-slate-500 font-bold uppercase mt-4">DATA UNAVAILABLE</div>
-                        )}
+                       <h4 className="text-[9px] text-slate-500 uppercase mb-2 text-center">Confidence</h4>
+                       {responseObj?.uncertainty?.sample_count ? (
+                         <div className="text-center">
+                            <span className="text-sm font-bold text-emerald-400 block">{responseObj.uncertainty.sample_count}</span>
+                            <span className="text-[9px] text-slate-500">MC Iterations</span>
+                         </div>
+                       ) : (
+                         <div className="text-[9px] text-slate-500 font-bold uppercase mt-2">Data Unavailable</div>
+                       )}
                     </div>
                  </div>
               </div>
-              <RequiresAPI endpoint="GET /api/v1/intelligence/explainability" />
            </div>
 
            <div className="flex-1 bg-[#1e293b] rounded-md border border-slate-700/50 p-4 relative">

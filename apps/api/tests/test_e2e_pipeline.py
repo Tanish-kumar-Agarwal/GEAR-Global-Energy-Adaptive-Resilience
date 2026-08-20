@@ -1,4 +1,10 @@
 import pytest
+import sys
+import os
+
+# Add the apps/api directory to sys.path so 'main' can be resolved
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from fastapi.testclient import TestClient
 from main import app
 from core.database import get_db, Base
@@ -7,13 +13,16 @@ from sqlalchemy.orm import sessionmaker
 import uuid
 
 # Use an in-memory SQLite database for testing
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_e2e.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./test_e2e_temp.db"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+import models.domain
+
+Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
 
 def override_get_db():
@@ -24,6 +33,14 @@ def override_get_db():
         db.close()
 
 app.dependency_overrides[get_db] = override_get_db
+
+from core.security import get_current_user
+from models.domain import User, Role
+
+def override_get_current_user():
+    return User(id="test-user-id", username="admin", role=Role.ADMIN, is_active=True)
+
+app.dependency_overrides[get_current_user] = override_get_current_user
 
 client = TestClient(app)
 
@@ -67,23 +84,12 @@ def test_full_pipeline_e2e():
     assert response.status_code == 200
     assert isinstance(response.json(), list)
     
-    # 5. Create a Decision
-    dec_payload = {
-        "scenario_id": scenario_id,
-        "recommendation_id": opt_job_id,
-        "status": "PENDING",
-        "action_plan": {"route": "R1", "volume": 100}
-    }
-    response = client.post("/api/v1/decisions", json=dec_payload)
-    assert response.status_code == 200
-    decision_id = response.json()["decision_id"]
-    
-    # 6. Update Decision Status
+    # 5/6. Update Decision Status (Approve)
     update_payload = {
-        "status": "APPROVED",
-        "review_note": "Looks good"
+        "reason": "Looks good",
+        "comment": "Approved by E2E test"
     }
-    response = client.put(f"/api/v1/decisions/{decision_id}", json=update_payload)
+    response = client.post(f"/api/v1/decisions/{scenario_id}/approve", json=update_payload)
     assert response.status_code == 200
     assert response.json()["status"] == "APPROVED"
     

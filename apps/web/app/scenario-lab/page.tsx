@@ -273,10 +273,17 @@ function ScenarioLabContent() {
                        <div className="flex justify-between"><span className="text-slate-400">Expected (P50)</span><span className="text-slate-200">{results.monte_carlo.p50_gap}M</span></div>
                        <div className="flex justify-between"><span className="text-emerald-400">P10 (Optimistic)</span><span className="text-emerald-400">{results.monte_carlo.p10_gap}M</span></div>
                        <div className="flex justify-between"><span className="text-red-400">P90 (Pessimistic)</span><span className="text-red-400">{results.monte_carlo.p90_gap}M</span></div>
-                       <div className="border-t border-slate-700 mt-2 pt-2 flex justify-between"><span className="text-slate-500 text-[10px]">Simulations Run</span><span className="text-slate-300 text-[10px]">10,000</span></div>
+                       <div className="border-t border-slate-700 mt-2 pt-2 flex justify-between">
+                         <span className="text-slate-500 text-[10px]">Simulations Run</span>
+                         <span className="text-slate-300 text-[10px]">{results.uncertainty?.sample_count || 'UNAVAILABLE'}</span>
+                       </div>
                        <div>
-                         <div className="flex justify-between text-[10px] mb-1"><span className="text-slate-500">Confidence</span><span className="text-blue-400">78%</span></div>
-                         <div className="w-full bg-slate-800 h-1 rounded"><div className="bg-blue-500 h-1 rounded" style={{width: '78%'}}></div></div>
+                         <div className="flex justify-between text-[10px] mb-1">
+                           <span className="text-slate-500">Confidence</span>
+                           <span className="text-blue-400">
+                             {results.uncertainty?.sample_count ? 'HIGH' : 'UNAVAILABLE'}
+                           </span>
+                         </div>
                        </div>
                     </div>
                   </div>

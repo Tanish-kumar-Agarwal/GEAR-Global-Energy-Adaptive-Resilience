@@ -198,8 +198,8 @@ export default function WarRoom() {
         
         {/* KPI ROW */}
         <div className="flex gap-3 h-[80px]">
-          <KPICard title="SYSTEMIC RISK INDEX" value={overview?.systemic_risk || "--"} max="100" status="Elevated" statusColor="text-amber-500" chart />
-          <KPICard title="SUPPLY STRESS LEVEL" value={overview?.supply_stress ? `${overview.supply_stress}%` : "--"} status="Moderate" statusColor="text-amber-400" chart />
+          <KPICard title="SYSTEMIC RISK INDEX" value={overview?.systemic_risk || "--"} max="100" status={overview?.status || "DATA UNAVAILABLE"} statusColor="text-slate-400" chart />
+          <KPICard title="SUPPLY STRESS LEVEL" value={overview?.supply_stress ? `${overview.supply_stress}%` : "--"} status={overview?.supply_stress ? "Computed" : "DATA UNAVAILABLE"} statusColor="text-slate-400" chart />
           <div className="flex-1 rounded-md overflow-hidden flex">
             <UnavailableData label="RESERVE COVERAGE" />
           </div>

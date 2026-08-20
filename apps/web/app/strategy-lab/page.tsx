@@ -35,12 +35,26 @@ export default function StrategyLab() {
         const sid = data.strategy_id;
         
         // Poll for completion
+        let attempts = 0;
         const interval = setInterval(async () => {
-            const pollRes = await fetch(`http://localhost:8000/api/v1/strategy/scenarios/${sid}`);
-            const pollData = await pollRes.json();
-            if (pollData.status === 'COMPLETED' || pollData.status === 'FAILED') {
+            attempts++;
+            if (attempts > 40) {
                 clearInterval(interval);
-                setStrategyResult(pollData);
+                setRunning(false);
+                console.error("Strategy execution timed out.");
+                return;
+            }
+            try {
+                const pollRes = await fetch(`http://localhost:8000/api/v1/strategy/scenarios/${sid}`);
+                const pollData = await pollRes.json();
+                if (pollData.status === 'COMPLETED' || pollData.status === 'FAILED') {
+                    clearInterval(interval);
+                    setStrategyResult(pollData);
+                    setRunning(false);
+                }
+            } catch (err) {
+                console.error(err);
+                clearInterval(interval);
                 setRunning(false);
             }
         }, 1500);

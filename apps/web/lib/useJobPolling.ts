@@ -12,7 +12,16 @@ export function useJobPolling(jobId: string | null, scenarioId: string | null) {
 
     let intervalId: NodeJS.Timeout;
 
+    let attempts = 0;
+    const MAX_ATTEMPTS = 40; // 60 seconds at 1.5s interval
+
     const poll = async () => {
+      attempts++;
+      if (attempts > MAX_ATTEMPTS) {
+         setError('Job polling timed out.');
+         clearInterval(intervalId);
+         return;
+      }
       try {
         const response = await ApiClient.getScenarioResults(scenarioId);
         setStatus(response.job_status);
