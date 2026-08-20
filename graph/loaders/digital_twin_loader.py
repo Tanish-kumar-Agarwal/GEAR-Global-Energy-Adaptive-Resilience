@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(root_dir, "apps", "api"))
 sys.path.insert(0, root_dir)
 
 from core.database import SessionLocal
-from models.domain import Country, Supplier, Route, Chokepoint, EnergyAsset, TradeFlow
+from models.domain import Country, Supplier, Route, Chokepoint, EnergyAsset, TradeFlow, Commodity
 from graph.neo4j_client import neo4j_client
 
 def load_full_graph_projection():

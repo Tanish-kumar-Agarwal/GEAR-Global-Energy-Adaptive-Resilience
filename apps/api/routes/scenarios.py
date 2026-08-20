@@ -39,6 +39,7 @@ def run_scenario(id: str, db: Session = Depends(get_db), user: User = Depends(Re
         
     job = Job(type="SCENARIO_SIMULATION")
     db.add(job)
+    db.flush()
     scenario.job_id = job.id
     db.commit()
     

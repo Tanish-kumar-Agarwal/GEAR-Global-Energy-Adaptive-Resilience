@@ -117,7 +117,7 @@ class ResponseOrchestratorService:
                 )
         
         # 4. Explainability
-        explainability = self.explainability_svc.generate_scenario_explainability(str(scenario.job_id))
+        explainability = self.explainability_svc.generate_scenario_explainability(str(scenario.id))
         
         exp_dict = {}
         alternatives = []

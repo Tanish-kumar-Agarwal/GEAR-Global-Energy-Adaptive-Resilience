@@ -99,13 +99,6 @@ export class ApiClient {
   }
 
   // Decisions
-  static async createDecision(data: DecisionRecord): Promise<DecisionResponse> {
-    return this.request<DecisionResponse>('/decisions', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
   static async getPendingDecisions(): Promise<any[]> {
     return this.request<any[]>('/decisions/pending');
   }
@@ -114,12 +107,6 @@ export class ApiClient {
     return this.request<any>(`/decisions/${id}`);
   }
 
-  static async updateDecision(id: string, status: string, reviewNote?: string): Promise<any> {
-    return this.request<any>(`/decisions/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ status, review_note: reviewNote }),
-    });
-  }
 
   // MARKET & ECONOMICS
   static async getEconomicImpact(scenarioId: string) {

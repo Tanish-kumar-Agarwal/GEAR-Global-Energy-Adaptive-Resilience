@@ -38,39 +38,14 @@ function ResponseOrchestratorContent() {
   const submitForReview = async () => {
     if (!scenarioId || !responseObj?.recommendation?.recommendation_id) return;
     setApproving(true);
-    const res = await fetch('http://localhost:8000/api/v1/decisions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            scenario_id: scenarioId,
-            recommendation_id: responseObj.recommendation.recommendation_id,
-            status: 'PENDING',
-            action_plan: { optimization: responseObj.optimization }
-        })
-    });
-    const decData = await res.json();
+    await ApiClient.reviewDecision(scenarioId, "Review requested by Orchestrator", "Submitted from Response Orchestrator");
     const updated = await ApiClient.getMasterResponse(scenarioId);
     setResponseObj(updated);
     setApproving(false);
   };
 
-  // Mock Radar data mapped to the reference image structure for the Recharts shell
-  const radarData = [
-    { subject: 'Supply Security', A: 84, B: 40, fullMark: 100 },
-    { subject: 'Cost Efficiency', A: 78, B: 30, fullMark: 100 },
-    { subject: 'Execution Speed', A: 81, B: 20, fullMark: 100 },
-    { subject: 'Risk Reduction', A: 87, B: 30, fullMark: 100 },
-    { subject: 'Feasibility', A: 79, B: 90, fullMark: 100 },
-    { subject: 'Strategic Flexibility', A: 82, B: 50, fullMark: 100 },
-  ];
-
-  // Pie chart data for Confidence Breakdown
-  const pieData = [
-    { name: 'Data Quality', value: 34, color: '#3b82f6' },
-    { name: 'Model Confidence', value: 28, color: '#f59e0b' },
-    { name: 'Scenario Certainty', value: 20, color: '#10b981' },
-    { name: 'Assumptions Validity', value: 18, color: '#8b5cf6' },
-  ];
+  const radarData = responseObj?.radar_data || [];
+  const pieData = responseObj?.confidence_breakdown || [];
 
   const target = responseObj?.problem?.target || 'Strait of Hormuz';
   const severity = responseObj?.problem?.severity || 0.7;
@@ -162,9 +137,9 @@ function ResponseOrchestratorContent() {
            </div>
            <div className="flex gap-6 border-l border-slate-700 pl-6">
               <TopKpi label="Projected Supply Gap" value={`${supplyGap.toFixed(1)} Mb/d`} sub="Without Action" color="text-red-400" />
-              <TopKpi label="Optimized Supply Gap" value={`${optShortage.toFixed(1)} Mb/d`} sub="With AI Plan" color="text-emerald-400" />
-              <TopKpi label="Economic Impact Avoided" value={responseObj?.impact?.economic_impact_total || "$18.7B"} sub="Vs. No Action" color="text-emerald-400" />
-              <TopKpi label="Risk Reduction" value="↓ 29%" sub="Systemic Risk" color="text-emerald-400" />
+              <TopKpi label="Optimized Supply Gap" value={optShortage ? `${optShortage.toFixed(1)} Mb/d` : "DATA UNAVAILABLE"} sub="With AI Plan" color="text-emerald-400" />
+              <TopKpi label="Economic Impact Avoided" value={responseObj?.impact?.economic_impact_total || "DATA UNAVAILABLE"} sub="Vs. No Action" color="text-emerald-400" />
+              <TopKpi label="Risk Reduction" value={responseObj?.impact?.risk_reduction || "DATA UNAVAILABLE"} sub="Systemic Risk" color="text-emerald-400" />
            </div>
         </div>
 
@@ -205,15 +180,12 @@ function ResponseOrchestratorContent() {
                     ))
                  ) : null}
 
-                 {/* Always show the visual reference mock items underneath with a RequiresAPI overlay if no real data is mapped perfectly */}
+                 {/* Legitimate DATA_UNAVAILABLE handling when no options are available */}
                  {!options.length && !running && (
-                    <div className="relative">
-                       <ActionCard num="01" title="Diversify Procurement from Supplier A" sub="Procurement" desc="Increase allocation from UAE & Saudi Arabia" impact="HIGH" time="72h" reduction="18%" icon={<Ship className="w-4 h-4" />} />
-                       <ActionCard num="02" title="Redirect Shipments via Route C" sub="Logistics" desc="Shift 15% volumes through Cape Route" impact="HIGH" time="48h" reduction="12%" icon={<Ship className="w-4 h-4" />} />
-                       <ActionCard num="03" title="Controlled Strategic Reserve Release" sub="Reserves" desc="Release 4% reserves gradually over 15 days" impact="MEDIUM" time="Immediate" reduction="9%" icon={<Database className="w-4 h-4" />} />
-                       <ActionCard num="04" title="Secure Alternative Contracts" sub="Contracts" desc="Lock in spot cargoes from US & Brazil" impact="MEDIUM" time="72h" reduction="6%" icon={<Lock className="w-4 h-4" />} />
-                       <ActionCard num="05" title="Optimize Refinery Runs" sub="Operations" desc="Adjust crude slate & maximize throughput" impact="LOW" time="24h" reduction="3%" icon={<Factory className="w-4 h-4" />} />
-                       <RequiresAPI endpoint="GET /api/v1/response/{scenario_id}" />
+                    <div className="flex flex-col items-center justify-center p-8 bg-slate-900/50 rounded-lg border border-slate-700/50 text-slate-500">
+                       <AlertTriangle className="w-8 h-8 mb-2 opacity-50" />
+                       <div className="text-xs font-bold tracking-widest uppercase">Data Unavailable</div>
+                       <div className="text-[10px] mt-1 text-center">No optimization plan or recommendations could be generated for this scenario.</div>
                     </div>
                  )}
               </div>
@@ -223,20 +195,29 @@ function ResponseOrchestratorContent() {
            <div className="flex-1 flex flex-col gap-3">
               <div className="flex-1 bg-[#1e293b] rounded-md border border-slate-700/50 p-4 relative">
                  <h3 className="text-[11px] font-bold tracking-wider text-slate-400 uppercase absolute top-4 left-4 z-10">Recommended Strategy Summary</h3>
-                 <div className="absolute inset-0 pt-8 pb-4">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart cx="50%" cy="50%" outerRadius="60%" data={radarData}>
-                        <PolarGrid stroke="#334155" />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 9 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                        <Radar name="AI Recommended Plan" dataKey="A" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} />
-                        <Radar name="No Action (Baseline)" dataKey="B" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0} strokeDasharray="3 3" />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                    <div className="flex justify-center gap-6 mt-2 text-[9px]">
-                       <div className="flex items-center gap-1"><div className="w-3 h-[2px] bg-blue-500"></div> AI Recommended Plan</div>
-                       <div className="flex items-center gap-1"><div className="w-3 h-[2px] bg-amber-500 border-dashed"></div> No Action (Baseline)</div>
-                    </div>
+                 <div className="absolute inset-0 pt-8 pb-4 flex flex-col items-center justify-center text-slate-500">
+                    {radarData.length > 0 ? (
+                      <>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RadarChart cx="50%" cy="50%" outerRadius="60%" data={radarData}>
+                            <PolarGrid stroke="#334155" />
+                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 9 }} />
+                            <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                            <Radar name="AI Recommended Plan" dataKey="A" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} />
+                            <Radar name="No Action (Baseline)" dataKey="B" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0} strokeDasharray="3 3" />
+                          </RadarChart>
+                        </ResponsiveContainer>
+                        <div className="flex justify-center gap-6 mt-2 text-[9px]">
+                           <div className="flex items-center gap-1"><div className="w-3 h-[2px] bg-blue-500"></div> AI Recommended Plan</div>
+                           <div className="flex items-center gap-1"><div className="w-3 h-[2px] bg-amber-500 border-dashed"></div> No Action (Baseline)</div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center">
+                        <AlertTriangle className="w-6 h-6 mb-2 opacity-50" />
+                        <div className="text-[10px] font-bold tracking-widest uppercase">DATA UNAVAILABLE</div>
+                      </div>
+                    )}
                  </div>
                  <RequiresAPI endpoint="GET /api/v1/optimization/strategy-scores" />
               </div>
@@ -280,21 +261,27 @@ function ResponseOrchestratorContent() {
                        <div className="flex justify-between text-[9px] mb-1"><span className="text-slate-300">Geopolitical Events</span><span className="text-slate-500">12 sources</span></div>
                        <div className="flex justify-between text-[9px] mb-1"><span className="text-slate-300">Shipping Intelligence</span><span className="text-slate-500">25 signals</span></div>
                     </div>
-                    <div className="w-1/2 relative">
+                    <div className="w-1/2 relative flex flex-col items-center justify-center">
                        <h4 className="text-[9px] text-slate-500 uppercase mb-2 text-center">Confidence Breakdown</h4>
-                       <div className="h-20 w-20 mx-auto">
-                         <ResponsiveContainer width="100%" height="100%">
-                           <PieChart>
-                             <Pie data={pieData} innerRadius={25} outerRadius={35} paddingAngle={2} dataKey="value" stroke="none">
-                               {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                             </Pie>
-                           </PieChart>
-                         </ResponsiveContainer>
-                       </div>
-                       <div className="absolute inset-0 flex flex-col items-center justify-center pt-5">
-                          <span className="text-sm font-bold text-white leading-none">78%</span>
-                          <span className="text-[6px] text-slate-500">Overall Confidence</span>
-                       </div>
+                       {pieData.length > 0 ? (
+                          <>
+                           <div className="h-20 w-20 mx-auto">
+                             <ResponsiveContainer width="100%" height="100%">
+                               <PieChart>
+                                 <Pie data={pieData} innerRadius={25} outerRadius={35} paddingAngle={2} dataKey="value" stroke="none">
+                                   {pieData.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                                 </Pie>
+                               </PieChart>
+                             </ResponsiveContainer>
+                           </div>
+                           <div className="absolute inset-0 flex flex-col items-center justify-center pt-5">
+                              <span className="text-sm font-bold text-white leading-none">78%</span>
+                              <span className="text-[6px] text-slate-500">Overall Confidence</span>
+                           </div>
+                          </>
+                        ) : (
+                          <div className="text-[10px] text-slate-500 font-bold uppercase mt-4">DATA UNAVAILABLE</div>
+                        )}
                     </div>
                  </div>
               </div>
@@ -338,12 +325,11 @@ function ResponseOrchestratorContent() {
         <div className="bg-[#1e293b] rounded-md border border-slate-700/50 p-4 shadow-sm flex flex-col gap-4">
           <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">Key Impact Metrics <span className="normal-case text-slate-500">({durationDays} Days)</span></h3>
           <div className="flex flex-col gap-3">
-            <RightMetric label="Global Supply Gap" value={`${supplyGap.toFixed(1)} Mb/d`} trend="↑ 21%" color="text-red-400" />
-            <RightMetric label="Price Impact (Oil)" value="$104 /bbl" trend="↑ 24%" color="text-red-400" />
-            <RightMetric label="LNG Price Impact" value="$16.8 /MMBtu" trend="↑ 32%" color="text-red-400" />
-            <RightMetric label="Reserve Depletion (India)" value="3.2 Days" trend="↑ 32%" color="text-red-400" />
-            <RightMetric label="Shipping Cost Index" value="241 Index" trend="↑ 41%" color="text-red-400" />
-            <RightMetric label="Refinery Utilization (India)" value="78 %" trend="↓ 11%" color="text-emerald-400" />
+            <RightMetric label="Global Supply Gap" value={`${supplyGap.toFixed(1)} Mb/d`} trend="↑" color="text-red-400" />
+            <RightMetric label="Price Impact (Oil)" value={responseObj?.impact?.price_impact_oil || "DATA UNAVAILABLE"} trend="-" color="text-slate-500" />
+            <RightMetric label="LNG Price Impact" value={responseObj?.impact?.price_impact_lng || "DATA UNAVAILABLE"} trend="-" color="text-slate-500" />
+            <RightMetric label="Reserve Depletion" value={responseObj?.impact?.reserve_depletion || "DATA UNAVAILABLE"} trend="-" color="text-slate-500" />
+            <RightMetric label="Shipping Cost Index" value={responseObj?.impact?.shipping_cost || "DATA UNAVAILABLE"} trend="-" color="text-slate-500" />
           </div>
         </div>
 

@@ -1,6 +1,6 @@
 from .celery_app import celery_app
 from core.database import SessionLocal
-from models.domain import Job, JobStatus, TradeFlow, Route, EnergyAsset, DecisionAudit, Country
+from models.domain import Job, JobStatus, TradeFlow, Route, EnergyAsset, DecisionAudit, Country, Scenario
 from simulation.monte_carlo.runner import run_monte_carlo
 from optimization.procurement import optimize_procurement
 import logging
@@ -95,6 +95,9 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
         duration_days = cascade.get("initial_disruption", {}).get("duration_days", 30)
         baseline_impact = scenario_job.result.get("impact", {})
         baseline_economic = scenario_job.result.get("economic_impact", {})
+        
+        scenario = db.query(Scenario).filter(Scenario.job_id == scenario_job_id).first()
+        actual_scenario_id = str(scenario.id) if scenario else scenario_job_id
 
         # 2. Extract active routes and reserves from DB
         db_routes = db.query(Route).all()
@@ -173,31 +176,30 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
         baseline_shortage = baseline_impact.get("supply_gap", 0)
         resilience_improvement = round(baseline_shortage - opt_shortage, 2)
 
-        # 6. Build Final Result
+        # 6. Build Final Result matching ResponseOrchestrator expectations
         opt_job.result = {
-            "optimization": {
-                "status": "completed",
-                "strategy_id": str(uuid.uuid4()),
-                "objective": {
-                    "baseline_shortage": round(baseline_shortage, 2),
-                    "optimized_shortage": round(opt_shortage, 2),
-                    "improvement": resilience_improvement
-                },
-                "allocation": opt_result["allocation"],
-                "recovery": opt_result["recovery"],
-                "economic_impact": opt_economic,
-                "resilience": opt_result["resilience"],
-                "avoided_loss": avoided_loss,
-                "constraints": ["Route capacities", "Reserve capacities", "Demand satisfaction"],
-                "assumptions": ["Storage draws are linear over duration", "Full route capacity is accessible"],
-                "provenance": ["PostgreSQL EnergyAsset", "PostgreSQL Route", "Phase 4.3 Cascade"],
-                "methodology": "OR-Tools GLOP optimization minimizing physical unmet demand."
-            }
+            "scenario_id": actual_scenario_id,
+            "status": "completed",
+            "strategy_id": str(uuid.uuid4()),
+            "objective": {
+                "baseline_shortage": round(baseline_shortage, 2),
+                "optimized_shortage": round(opt_shortage, 2),
+                "improvement": resilience_improvement
+            },
+            "allocations": opt_result["allocation"],
+            "reserve_usage": opt_result["recovery"],
+            "economic_impact": opt_economic,
+            "resilience": opt_result["resilience"],
+            "avoided_loss": avoided_loss,
+            "constraints": ["Route capacities", "Reserve capacities", "Demand satisfaction"],
+            "assumptions": ["Storage draws are linear over duration", "Full route capacity is accessible"],
+            "provenance": ["PostgreSQL EnergyAsset", "PostgreSQL Route", "Phase 4.3 Cascade"],
+            "methodology": "OR-Tools GLOP optimization minimizing physical unmet demand."
         }
         
         # 7. Create DecisionAudit
         audit = DecisionAudit(
-            scenario_id=scenario_job_id,
+            scenario_id=actual_scenario_id,
             recommendation_id=opt_job.id,
             status="OPTIMIZED",
             action_plan=opt_job.result,

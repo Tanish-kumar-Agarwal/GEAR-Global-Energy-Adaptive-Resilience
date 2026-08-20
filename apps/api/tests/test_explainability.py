@@ -8,7 +8,7 @@ def test_explainability_missing_job():
     db.query().filter().first.return_value = None
     
     svc = ExplainabilityService(db)
-    res = svc.generate_scenario_explainability("FAKE_JOB")
+    res = svc.generate_scenario_explainability("00000000-0000-0000-0000-000000000000")
     assert res is None
 
 def test_explainability_valid_generation():
@@ -16,7 +16,7 @@ def test_explainability_valid_generation():
     
     # Mocking Job
     class MockJob:
-        id = "JOB1"
+        id = "11111111-1111-1111-1111-111111111111"
         result = {
             "cascade": {"initial_disruption": {"target": "CHK_HORMUZ"}},
             "impact": {"supply_gap": 10.0},
@@ -27,7 +27,7 @@ def test_explainability_valid_generation():
     
     # Mocking DecisionAudit
     class MockAudit:
-        scenario_id = "JOB1"
+        scenario_id = "11111111-1111-1111-1111-111111111111"
         action_plan = {
             "optimization": {
                 "status": "completed",
@@ -46,7 +46,7 @@ def test_explainability_valid_generation():
     db.query().filter().order_by().first.side_effect = lambda: MockAudit()
     
     svc = ExplainabilityService(db)
-    res = svc.generate_scenario_explainability("JOB1")
+    res = svc.generate_scenario_explainability("11111111-1111-1111-1111-111111111111")
     
     assert res is not None
     assert isinstance(res, ScenarioExplainabilityResponse)
@@ -78,7 +78,7 @@ def test_explainability_missing_optimization():
     db = MagicMock()
     
     class MockJob:
-        id = "JOB1"
+        id = "11111111-1111-1111-1111-111111111111"
         result = {
             "cascade": {"initial_disruption": {"target": "CHK_HORMUZ"}},
             "impact": {"supply_gap": 10.0},
@@ -88,7 +88,7 @@ def test_explainability_missing_optimization():
         }
     
     class MockAuditIncomplete:
-        scenario_id = "JOB1"
+        scenario_id = "11111111-1111-1111-1111-111111111111"
         action_plan = {
             "optimization": {
                 "status": "infeasible"
@@ -99,7 +99,7 @@ def test_explainability_missing_optimization():
     db.query().filter().order_by().first.side_effect = lambda: MockAuditIncomplete()
     
     svc = ExplainabilityService(db)
-    res = svc.generate_scenario_explainability("JOB1")
+    res = svc.generate_scenario_explainability("11111111-1111-1111-1111-111111111111")
     
     assert res.recommendation.status == "data_unavailable"
     assert res.expected_impact.recommended["shortage"] == "data_unavailable"

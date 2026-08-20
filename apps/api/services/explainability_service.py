@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from models.domain import Job, DecisionAudit, JobStatus
+from models.domain import Job, DecisionAudit, JobStatus, Scenario
 from schemas.explainability import (
     ScenarioExplainabilityResponse, RecommendationDetail, ExpectedImpact,
     CausalLink, EvidenceItem, AssumptionItem, ConfidenceDetail, ProvenanceDetail, AlternativeStrategy
@@ -10,16 +10,19 @@ class ExplainabilityService:
     def __init__(self, db: Session):
         self.db = db
         
-    def generate_scenario_explainability(self, scenario_job_id: str) -> ScenarioExplainabilityResponse:
+    def generate_scenario_explainability(self, scenario_id: str) -> ScenarioExplainabilityResponse:
         # 1. Fetch Scenario Job and Optimization Job
         import uuid
-        scenario_job_uuid = uuid.UUID(scenario_job_id)
-        scenario_job = self.db.query(Job).filter(Job.id == scenario_job_uuid).first()
+        scenario_uuid = uuid.UUID(scenario_id)
+        scenario = self.db.query(Scenario).filter(Scenario.id == scenario_uuid).first()
+        if not scenario or not scenario.job_id:
+            return None
+        scenario_job = self.db.query(Job).filter(Job.id == scenario.job_id).first()
         if not scenario_job or not scenario_job.result:
             return None # Scenario not found or not complete
             
         # 2. Fetch the latest DecisionAudit for this scenario
-        audit = self.db.query(DecisionAudit).filter(DecisionAudit.scenario_id == scenario_job_id).order_by(DecisionAudit.timestamp.desc()).first()
+        audit = self.db.query(DecisionAudit).filter(DecisionAudit.scenario_id == scenario_id).order_by(DecisionAudit.timestamp.desc()).first()
         
         # 3. Extract Baseline Data
         baseline_impact = scenario_job.result.get("impact", {})
@@ -114,7 +117,7 @@ class ExplainabilityService:
             EvidenceItem(
                 source_type="PostgreSQL",
                 entity="Job",
-                entity_id=scenario_job_id,
+                entity_id=str(scenario_job.id),
                 field="result.cascade",
                 value=target,
                 role="scenario_target"
@@ -122,7 +125,7 @@ class ExplainabilityService:
             EvidenceItem(
                 source_type="PostgreSQL",
                 entity="Job",
-                entity_id=scenario_job_id,
+                entity_id=str(scenario_job.id),
                 field="result.impact.supply_gap",
                 value=baseline_impact.get("supply_gap"),
                 role="baseline_shortage"
@@ -200,7 +203,7 @@ class ExplainabilityService:
 
         # Final Assembly
         return ScenarioExplainabilityResponse(
-            scenario_id=scenario_job_id,
+            scenario_id=scenario_id,
             recommendation=rec,
             expected_impact=expected_impact,
             primary_drivers=primary_drivers,
