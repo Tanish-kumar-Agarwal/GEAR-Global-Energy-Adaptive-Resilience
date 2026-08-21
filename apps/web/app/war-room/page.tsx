@@ -1,14 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Activity, AlertTriangle, Package, Map as MapIcon, Globe, ShieldAlert, TrendingUp, TrendingDown, Clock, Database } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Activity, AlertTriangle, Clock, Package, Globe, TrendingUp, TrendingDown, Database, Layers, Maximize2, Check } from 'lucide-react';
 import { RiskTrendChart, RiskExposures, ActiveEventsList, GlobalSupplyBalanceChart } from '@/components/risk-components';
 import { SystemHealthComponent } from '@/components/system-health';
-import { MapViewer } from '@/components/map-viewer';
+import { MapViewer, MAP_LAYER_IDS, MAP_LAYER_LABELS, MapLayerId, SelectedMapFeature } from '@/components/map-viewer';
+import { RiskHeatmapMap } from '@/components/risk-heatmap-map';
+import { SnapshotFallbackBadge } from '@/components/snapshot-badge';
 import { ApiClient } from '@/lib/api';
 import { useRouter } from 'next/navigation';
-import { DATA_MODE } from '@/lib/config';
-import { HACKATHON_TOP_RISKS, HACKATHON_WORLD_OVERVIEW } from '@/data/snapshot';
+import { HACKATHON_TOP_RISKS, HACKATHON_MAP_ASSETS, HACKATHON_SUPPLY_ROUTES, HACKATHON_CHOKEPOINTS, SupplyRoute, MapAsset } from '@/data/snapshot';
+import {
+  toSupplyRoutes, toChokepoints, toMapAssets, toRegionScores, toTopRisks,
+  toWatchlist, toNewsItems, toPriceRows, toCategoryRows, indiaReserveCoverage,
+  toBalanceSeries, toSupplyChainStages, ChokepointRow, WatchlistRow, PriceRow,
+  CategoryRow, BalancePoint, StageStatus,
+} from '@/lib/live-adapters';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 
 function UnavailableData({ label }: { label: string }) {
@@ -25,31 +32,26 @@ function UnavailableData({ label }: { label: string }) {
   );
 }
 
-function WatchlistList() {
-  const getAssetType = (id: string) => {
-    switch (id) {
-      case 'R1': return 'Chokepoint';
-      case 'R2': return 'Policy';
-      case 'R3': return 'Route';
-      case 'R4': return 'Geopolitics';
-      case 'R5': return 'Policy';
-      default: return 'Asset';
-    }
-  };
-
-  const getTargetArrow = (id: string) => {
-    return id === 'R5' ? (
-      <span className="text-amber-400 font-bold">→</span>
-    ) : (
-      <span className="text-red-500 font-bold">↑</span>
-    );
-  };
-
+// Live rows are risk-scored assets/chokepoints from the backend; without them
+// the designed snapshot watchlist keeps the panel populated.
+function WatchlistList({ rows }: { rows?: WatchlistRow[] | null }) {
   const getRiskColor = (index: number) => {
     if (index > 90) return 'text-red-500';
     if (index > 80) return 'text-red-400';
-    return 'text-amber-400';
+    if (index > 50) return 'text-amber-400';
+    return 'text-emerald-400';
   };
+
+  const items: { id: string; name: string; kind: string; risk: number; arrowUp: boolean }[] =
+    rows && rows.length
+      ? rows.map(r => ({ id: r.id, name: r.name, kind: r.kind, risk: r.risk ?? 0, arrowUp: (r.risk ?? 0) >= 50 }))
+      : HACKATHON_TOP_RISKS.map(a => ({
+          id: a.id,
+          name: a.event.replace(' escalation', '').replace(' export controls', ' Controls').replace(' shipping disruption', ' Shipping'),
+          kind: ({ R1: 'Chokepoint', R2: 'Policy', R3: 'Route', R4: 'Geopolitics', R5: 'Policy' } as Record<string, string>)[a.id] ?? 'Asset',
+          risk: a.index,
+          arrowUp: a.id !== 'R5',
+        }));
 
   return (
     <div className="flex flex-col w-full h-full text-[11px]">
@@ -60,14 +62,16 @@ function WatchlistList() {
         <span className="w-12 text-center">Target</span>
       </div>
       <div className="flex flex-col gap-1 overflow-y-auto pr-1 pb-2">
-        {HACKATHON_TOP_RISKS.map(a => (
+        {items.map(a => (
           <div key={a.id} className="flex justify-between items-center py-1 border-b border-slate-800/50 last:border-0">
-            <span className="flex-[1.5] font-extrabold text-slate-200 truncate pr-2">
-              {a.event.replace(' escalation', '').replace(' export controls', ' Controls').replace(' shipping disruption', ' Shipping')}
+            <span className="flex-[1.5] font-extrabold text-slate-200 truncate pr-2">{a.name}</span>
+            <span className="flex-1 text-slate-300 text-center font-extrabold">{a.kind}</span>
+            <span className={`w-12 text-center font-mono font-extrabold ${getRiskColor(a.risk)}`}>{a.risk}</span>
+            <span className="w-12 text-center text-[12px] font-extrabold">
+              {a.arrowUp
+                ? <span className="text-red-500 font-bold">↑</span>
+                : <span className="text-amber-400 font-bold">→</span>}
             </span>
-            <span className="flex-1 text-slate-300 text-center font-extrabold">{getAssetType(a.id)}</span>
-            <span className={`w-12 text-center font-mono font-extrabold ${getRiskColor(a.index)}`}>{a.index}</span>
-            <span className="w-12 text-center text-[12px] font-extrabold">{getTargetArrow(a.id)}</span>
           </div>
         ))}
       </div>
@@ -130,35 +134,159 @@ function AssetPopover({ asset, onClose }: { asset: any, onClose: () => void }) {
   );
 }
 
+const ALL_LAYERS_ON: Record<MapLayerId, boolean> = {
+  routes: true, chokepoints: true, ports: true, production: true, refineries: true, storage: true,
+};
+
+function MapToolbar({ layers, setLayers, onFullscreen }: {
+  layers: Record<MapLayerId, boolean>;
+  setLayers: React.Dispatch<React.SetStateAction<Record<MapLayerId, boolean>>>;
+  onFullscreen: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const allOn = MAP_LAYER_IDS.every(id => layers[id]);
+
+  const toggle = (id: MapLayerId) => setLayers(prev => ({ ...prev, [id]: !prev[id] }));
+
+  return (
+    <div className="relative z-20 flex items-center gap-1 px-2 h-9 bg-[#101a1f] border-b border-slate-700/50 flex-shrink-0">
+      <span className="text-[10px] text-slate-500 mr-1">View:</span>
+      {MAP_LAYER_IDS.map(id => (
+        <button
+          key={id}
+          onClick={() => toggle(id)}
+          className={`px-2.5 py-1 text-[10px] rounded-sm border transition-colors ${
+            layers[id]
+              ? 'bg-cyan-800/70 border-cyan-600/60 text-cyan-100'
+              : 'bg-slate-900/60 border-slate-700/50 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+          }`}
+        >
+          {MAP_LAYER_LABELS[id]}
+        </button>
+      ))}
+      <button
+        onClick={() => setLayers({ ...ALL_LAYERS_ON })}
+        className={`px-2.5 py-1 text-[10px] rounded-sm border transition-colors ${
+          allOn
+            ? 'bg-cyan-800/70 border-cyan-600/60 text-cyan-100'
+            : 'bg-slate-900/60 border-slate-700/50 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+        }`}
+      >
+        All Layers
+      </button>
+      <div className="flex-1" />
+      <div className="relative">
+        <button
+          onClick={() => setMenuOpen(o => !o)}
+          className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] rounded-sm border border-slate-700/50 bg-slate-900/60 text-slate-300 hover:bg-slate-800"
+        >
+          <Layers size={11} /> Layers
+        </button>
+        {menuOpen && (
+          <div className="absolute right-0 top-full mt-1 w-44 bg-[#101a1f] border border-slate-700/60 rounded-sm shadow-2xl p-1 flex flex-col">
+            {MAP_LAYER_IDS.map(id => (
+              <button
+                key={id}
+                onClick={() => toggle(id)}
+                className="flex items-center justify-between px-2 py-1.5 text-[10px] text-slate-300 hover:bg-slate-800 rounded-sm text-left"
+              >
+                {MAP_LAYER_LABELS[id]}
+                {layers[id] && <Check size={11} className="text-cyan-400" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <button
+        onClick={onFullscreen}
+        title="Fullscreen"
+        className="p-1.5 rounded-sm border border-slate-700/50 bg-slate-900/60 text-slate-300 hover:bg-slate-800"
+      >
+        <Maximize2 size={11} />
+      </button>
+    </div>
+  );
+}
+
 export default function WarRoom() {
   const [overview, setOverview] = useState<any>(null);
   const [riskEval, setRiskEval] = useState<any>(null);
-  const [assets, setAssets] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [assets, setAssets] = useState<MapAsset[]>(HACKATHON_MAP_ASSETS);
+  const [routes, setRoutes] = useState<SupplyRoute[]>(HACKATHON_SUPPLY_ROUTES);
+  const [chokepoints, setChokepoints] = useState<ChokepointRow[]>(HACKATHON_CHOKEPOINTS);
+  const [regionScores, setRegionScores] = useState<Record<string, number> | undefined>(undefined);
+  const [topRisks, setTopRisks] = useState<{ id: string; event: string; index: number }[]>(
+    HACKATHON_TOP_RISKS.map(r => ({ id: r.id, event: r.event, index: r.index })),
+  );
+  const [watchlist, setWatchlist] = useState<WatchlistRow[] | null>(null);
+  const [news, setNews] = useState<{ time: string; text: string; source: string }[] | null>(null);
+  const [prices, setPrices] = useState<PriceRow[] | null>(null);
+  const [categories, setCategories] = useState<CategoryRow[] | null>(null);
+  const [reserve, setReserve] = useState<{ days: number; belowTarget: boolean } | null>(null);
+  const [balance, setBalance] = useState<BalancePoint[] | null>(null);
+  const [stages, setStages] = useState<{ transportation: StageStatus; ports: StageStatus; demand: StageStatus } | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
+  const [mapLayers, setMapLayers] = useState<Record<MapLayerId, boolean>>({ ...ALL_LAYERS_ON });
+  const mapPanelRef = useRef<HTMLDivElement>(null);
 
   // In a real app we'd get this from a context, hardcoding the chokepoint for the MVP view
-  const activeEntityId = "CHK_HORMUZ"; 
+  const activeEntityId = "CHK_HORMUZ";
 
+  // Every call goes through ApiClient, which serves the live backend and
+  // falls back to snapshot payloads per request, so each panel fills with the
+  // best data available without any panel blocking another.
   useEffect(() => {
-    Promise.all([
-      ApiClient.getWorldOverview(),
-      ApiClient.getRiskEvaluation(),
-      fetch('http://localhost:8000/api/v1/world/assets').then(r => r.json())
-    ]).then(([ovData, riskData, asData]) => {
-      setOverview(ovData);
-      setRiskEval(riskData);
-      setAssets(asData);
-      setLoading(false);
-    }).catch(e => {
-      console.error(e);
-      setLoading(false);
-    });
+    ApiClient.getWorldOverview().then(setOverview).catch(console.error);
+    ApiClient.getRiskEvaluation().then(setRiskEval).catch(console.error);
+    ApiClient.getWorldRoutes().then(r => setRoutes(toSupplyRoutes(r))).catch(console.error);
+    Promise.all([ApiClient.getWatchlistAssets(), ApiClient.getWorldChokepoints()])
+      .then(([liveAssets, liveChokepoints]) => {
+        setAssets(toMapAssets(liveAssets));
+        setChokepoints(toChokepoints(liveChokepoints));
+        const rows = toWatchlist(liveAssets, liveChokepoints);
+        if (rows.length) setWatchlist(rows);
+      })
+      .catch(console.error);
+    ApiClient.getRiskHeatmap()
+      .then(h => {
+        setRegionScores(toRegionScores(h));
+        const risks = toTopRisks(h);
+        if (risks.length) setTopRisks(risks);
+      })
+      .catch(console.error);
+    ApiClient.getIntelligenceEvents(5)
+      .then(e => { const items = toNewsItems(e); if (items.length) setNews(items); })
+      .catch(console.error);
+    ApiClient.getMarketPrices()
+      .then(p => { const rows = toPriceRows(p); if (rows.length) setPrices(rows); })
+      .catch(console.error);
+    ApiClient.getRiskCategories()
+      .then(c => { const rows = toCategoryRows(c); if (rows.length) setCategories(rows); })
+      .catch(console.error);
+    ApiClient.getMarketReserveCoverage()
+      .then(r => setReserve(indiaReserveCoverage(r)))
+      .catch(console.error);
+    Promise.all([ApiClient.getSupplyChainStatus(), ApiClient.getMarketBalanceTimeseries()])
+      .then(([scs, ts]) => {
+        setStages(toSupplyChainStages(scs));
+        const series = toBalanceSeries(ts, typeof scs?.volume_at_risk_mbd === 'number' ? scs.volume_at_risk_mbd : null);
+        if (series.length) setBalance(series);
+      })
+      .catch(console.error);
   }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      mapPanelRef.current?.requestFullscreen();
+    }
+  };
 
   return (
     <div className="h-full min-h-[850px] min-w-[1280px] w-full bg-[#0f181b] p-3 flex gap-3 text-slate-300 font-sans">
-      
+      <SnapshotFallbackBadge />
+
       {/* LEFT COLUMN */}
       <div className="w-[320px] flex flex-col gap-3 flex-shrink-0 overflow-y-auto no-scrollbar">
         
@@ -168,61 +296,44 @@ export default function WarRoom() {
             <div>
               <h3 className="text-[11px] font-bold tracking-wider text-blue-200/80 drop-shadow-sm mb-1">RISK INDEX</h3>
               <div className="flex items-baseline gap-1 drop-shadow-[0_0_10px_rgba(255,255,255,0.15)]">
-                {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
-                  <>
-                    <span className="text-4xl font-light text-red-400">86</span>
-                    <span className="text-sm font-medium text-slate-500">/100</span>
-                  </>
-                ) : riskEval?.status === 'data_unavailable' ? (
-                  <span className="text-xl font-medium text-slate-500">UNAVAILABLE</span>
-                ) : (
-                  <>
-                    <span className="text-4xl font-light text-emerald-400">
-                      {riskEval ? riskEval.systemic_risk_score.toFixed(0) : "--"}
-                    </span>
-                    <span className="text-sm font-medium text-slate-500">/100</span>
-                  </>
-                )}
+                <span className={`text-4xl font-light ${
+                  (riskEval?.systemic_risk_score ?? 0) > 70 ? 'text-red-400'
+                    : (riskEval?.systemic_risk_score ?? 0) > 40 ? 'text-amber-400'
+                    : 'text-emerald-400'
+                }`}>
+                  {riskEval && riskEval.status !== 'data_unavailable' ? Math.round(riskEval.systemic_risk_score) : '--'}
+                </span>
+                <span className="text-sm font-medium text-slate-500">/100</span>
               </div>
-              <span className="text-sm font-medium text-red-400">
-                {DATA_MODE === 'HACKATHON_SNAPSHOT' ? 'High' : (riskEval && riskEval.status !== 'data_unavailable' ? (riskEval.systemic_risk_score > 70 ? 'High' : 'Moderate') : '')}
+              <span className={`text-sm font-medium ${
+                (riskEval?.systemic_risk_score ?? 0) > 70 ? 'text-red-400'
+                  : (riskEval?.systemic_risk_score ?? 0) > 40 ? 'text-amber-400'
+                  : 'text-emerald-400'
+              }`}>
+                {riskEval && riskEval.status !== 'data_unavailable'
+                  ? (riskEval.systemic_risk_score > 70 ? 'High' : riskEval.systemic_risk_score > 40 ? 'Moderate' : 'Low')
+                  : ''}
               </span>
             </div>
               <RiskTrendChart entityId={activeEntityId} />
           </div>
           
           <div className="flex flex-col gap-2 mt-2">
-            {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
-              <div className="flex flex-col gap-2 h-full overflow-y-auto no-scrollbar pb-2">
-                {HACKATHON_TOP_RISKS.map((risk, i) => {
-                  let severity = 'HIGH';
-                  let trend = 'UP';
-                  if (risk.index < 80) { severity = 'MEDIUM'; trend = 'RIGHT'; }
-                  if (risk.index > 90) trend = 'UP';
-                  else if (risk.index === 82) trend = 'DOWN';
-                  
-                  return (
-                    <RiskItem 
-                      key={risk.id}
-                      label={risk.event}
-                      value={risk.index}
-                      trend={trend}
-                      severity={severity}
-                    />
-                  );
-                })}
-              </div>
-            ) : (
-              riskEval?.status === 'data_unavailable' ? (
-                 <div className="text-[10px] text-slate-500 italic p-2 border border-slate-700/50 rounded">No active risks documented in backend</div>
-              ) : (
-                <>
-                  <RiskItem label="Active Critical Risks" value={riskEval?.active_critical_risks ?? "--"} trend="UP" severity="HIGH" />
-                  <RiskItem label="Active High Risks" value={riskEval?.active_high_risks ?? "--"} trend="RIGHT" severity="MEDIUM" />
-                  <RiskItem label="Total Monitored Events" value={riskEval?.event_count ?? "--"} trend="RIGHT" severity="LOW" />
-                </>
-              )
-            )}
+            <div className="flex flex-col gap-2 h-full overflow-y-auto no-scrollbar pb-2">
+              {topRisks.map(risk => {
+                const severity = risk.index >= 70 ? 'HIGH' : risk.index >= 45 ? 'MEDIUM' : 'LOW';
+                const trend = risk.index >= 80 ? 'UP' : risk.index >= 45 ? 'RIGHT' : 'DOWN';
+                return (
+                  <RiskItem
+                    key={risk.id}
+                    label={risk.event}
+                    value={risk.index}
+                    trend={trend}
+                    severity={severity}
+                  />
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -239,7 +350,7 @@ export default function WarRoom() {
         <div className="bg-[#182227] rounded-md border border-slate-700/50 p-4 flex-1 min-h-[220px] flex flex-col">
           <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-2 uppercase">WATCHLIST <span className="normal-case text-[10px] text-slate-400 font-bold">(At Risk Assets)</span></h3>
           <div className="flex-1">
-            <WatchlistList />
+            <WatchlistList rows={watchlist} />
           </div>
         </div>
       </div>
@@ -251,30 +362,32 @@ export default function WarRoom() {
         <div className="flex gap-3 min-h-[90px]">
           <KPICard title="SYSTEMIC RISK INDEX" value={overview?.systemic_risk || "--"} max="100" status={overview?.status === "ok" ? (overview.systemic_risk > 70 ? "Elevated" : "Moderate") : "DATA UNAVAILABLE"} statusColor={overview?.systemic_risk > 70 ? "text-red-400" : "text-slate-400"} chartType="up-red" />
           <KPICard title="SUPPLY STRESS LEVEL" value={overview?.supply_stress ? `${overview.supply_stress}%` : "--"} status={overview?.supply_stress > 30 ? "High" : (overview?.supply_stress ? "Moderate" : "DATA UNAVAILABLE")} statusColor="text-amber-400" chartType="up-amber" />
-          {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
-              <KPICard title="RESERVE COVERAGE (India)" value="9.8" unit="Days" status="Below Target" statusColor="text-red-400" chartType="down-red" />
+          {reserve ? (
+              <KPICard
+                title="RESERVE COVERAGE (India)"
+                value={reserve.days}
+                unit="Days"
+                status={reserve.belowTarget ? 'Below Target' : 'On Target'}
+                statusColor={reserve.belowTarget ? 'text-red-400' : 'text-emerald-400'}
+                chartType="down-red"
+              />
             ) : (
               <UnavailableData label="RESERVE COVERAGE" />
             )}
         </div>
 
         {/* MAIN MAP */}
-        <div className="flex-1 bg-[#182227] rounded-md border border-slate-700/50 overflow-hidden relative">
-          <div className="absolute top-2 left-2 z-10 flex gap-1 bg-slate-900/80 p-1 rounded border border-slate-700">
-            <button className="px-3 py-1 text-[10px] uppercase bg-blue-600 rounded text-white font-medium">Supply Routes</button>
-            <button className="px-3 py-1 text-[10px] uppercase hover:bg-slate-800 rounded">Chokepoints</button>
-            <button className="px-3 py-1 text-[10px] uppercase hover:bg-slate-800 rounded">Ports</button>
-            <button className="px-3 py-1 text-[10px] uppercase hover:bg-slate-800 rounded">Production</button>
-            <button className="px-3 py-1 text-[10px] uppercase hover:bg-slate-800 rounded">Refineries</button>
-            <button className="px-3 py-1 text-[10px] uppercase hover:bg-slate-800 rounded">Storage</button>
-          </div>
-          
-          <div className="absolute inset-0 bg-slate-900 flex items-center justify-center cursor-pointer" onClick={() => {
-            // Mock map interaction since actual webGL is too heavy, 
-            // if we have assets, just select the first one to demonstrate interaction
-            if (assets.length > 0 && !selectedAsset) setSelectedAsset(assets[0]);
-          }}>
-             {DATA_MODE === 'HACKATHON_SNAPSHOT' || assets.length > 0 ? <MapViewer assets={assets} /> : <div className="animate-pulse">Loading map...</div>}
+        <div ref={mapPanelRef} className="flex-1 bg-[#182227] rounded-md border border-slate-700/50 overflow-hidden relative flex flex-col">
+          <MapToolbar layers={mapLayers} setLayers={setMapLayers} onFullscreen={toggleFullscreen} />
+
+          <div className="relative flex-1 bg-slate-900">
+            <MapViewer
+              assets={assets}
+              routes={routes}
+              chokepoints={chokepoints}
+              visibleLayers={mapLayers}
+              onFeatureSelect={(feature: SelectedMapFeature) => setSelectedAsset(feature)}
+            />
           </div>
 
           {selectedAsset && (
@@ -287,14 +400,14 @@ export default function WarRoom() {
           <div className="flex-[0.55] bg-[#182227] rounded-md border border-slate-700/50 p-3 flex flex-col">
             <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-2 uppercase">SUPPLY CHAIN STATUS OVERVIEW</h3>
             <div className="flex-1 overflow-hidden">
-              <SupplyChainStatusOverview />
+              <SupplyChainStatusOverview stages={stages} />
             </div>
           </div>
           
           <div className="flex-[0.45] bg-[#182227] rounded-md border border-slate-700/50 px-3 py-2 flex flex-col justify-center">
             <h3 className="text-[10px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-1 uppercase">GLOBAL NEWS FEED</h3>
             <div className="flex-1 overflow-hidden">
-              <GlobalNewsFeedHorizontal />
+              <GlobalNewsFeedHorizontal news={news} />
             </div>
           </div>
         </div>
@@ -307,12 +420,21 @@ export default function WarRoom() {
         {/* PRICING SNAPSHOT */}
         <div className="bg-[#182227] rounded-md h-[120px] p-3 flex flex-col border border-slate-700/50">
           <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-2 uppercase">PRICING SNAPSHOT (USD)</h3>
-          {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
+          {prices ? (
             <div className="flex flex-col gap-1 text-[11px]">
-              <div className="flex justify-between"><span className="text-slate-200 font-bold">Brent Crude</span><span className="font-mono font-bold text-white">64.82 <span className="text-emerald-400 ml-1">+2.35%</span></span></div>
-              <div className="flex justify-between"><span className="text-slate-200 font-bold">WTI Crude</span><span className="font-mono font-bold text-white">61.47 <span className="text-emerald-400 ml-1">+2.18%</span></span></div>
-              <div className="flex justify-between"><span className="text-slate-200 font-bold">LNG (JKM)</span><span className="font-mono font-bold text-white">12.34 <span className="text-emerald-400 ml-1">+1.92%</span></span></div>
-              <div className="flex justify-between"><span className="text-slate-200 font-bold">Coal (API2)</span><span className="font-mono font-bold text-white">104.6 <span className="text-red-400 ml-1">-0.45%</span></span></div>
+              {prices.map(p => (
+                <div key={p.name} className="flex justify-between">
+                  <span className="text-slate-200 font-bold">{p.name}</span>
+                  <span className="font-mono font-bold text-white">
+                    {p.price}
+                    {p.change_pct != null && (
+                      <span className={`ml-1 ${p.change_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {p.change_pct >= 0 ? '+' : ''}{p.change_pct}%
+                      </span>
+                    )}
+                  </span>
+                </div>
+              ))}
             </div>
           ) : <UnavailableData label="" />}
         </div>
@@ -320,36 +442,42 @@ export default function WarRoom() {
         {/* SYSTEM STATUS */}
         <div className="bg-[#182227] rounded-md h-[120px] p-3 flex flex-col border border-slate-700/50">
           <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-2 uppercase">SYSTEM STATUS</h3>
-          {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
+          {categories ? (
             <div className="flex flex-col gap-1 text-[11px] font-bold text-slate-300">
-              <div className="flex justify-between items-center"><span className="flex items-center gap-2"><Globe size={12}/> Geopolitical Risk</span><span className="text-red-400 font-mono font-bold">72 ↑</span></div>
-              <div className="flex justify-between items-center"><span className="flex items-center gap-2"><Package size={12}/> Logistics Risk</span><span className="text-amber-400 font-mono font-bold">61 →</span></div>
-              <div className="flex justify-between items-center"><span className="flex items-center gap-2"><Database size={12}/> Supply Risk</span><span className="text-emerald-400 font-mono font-bold">42 ↓</span></div>
-              <div className="flex justify-between items-center"><span className="flex items-center gap-2"><Activity size={12}/> Market Risk</span><span className="text-emerald-400 font-mono font-bold">32 ↓</span></div>
+              {categories.slice(0, 4).map(c => {
+                const Icon = c.label.startsWith('Geo') ? Globe
+                  : c.label.startsWith('Log') ? Package
+                  : c.label.startsWith('Sup') ? Database
+                  : Activity;
+                const color = c.score >= 70 ? 'text-red-400' : c.score >= 45 ? 'text-amber-400' : 'text-emerald-400';
+                return (
+                  <div key={c.label} className="flex justify-between items-center">
+                    <span className="flex items-center gap-2"><Icon size={12} /> {c.label}</span>
+                    <span className={`${color} font-mono font-bold`}>{c.score} {c.trend}</span>
+                  </div>
+                );
+              })}
             </div>
           ) : <UnavailableData label="" />}
         </div>
 
         {/* RISK HEATMAP */}
-        <div className="bg-[#182227] rounded-md flex-1 min-h-[150px] p-3 flex flex-col border border-slate-700/50">
+        <div className="bg-[#182227] rounded-md flex-1 min-h-[190px] p-3 flex flex-col border border-slate-700/50">
           <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-2 uppercase">RISK HEATMAP <span className="normal-case text-slate-400 text-[10px] font-bold">(By Region)</span></h3>
-          {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
-             <div className="flex-1 w-full h-full relative overflow-hidden rounded mt-1">
-                <img 
-                  src="/risk-map-cropped.png" 
-                  alt="Risk Heatmap" 
-                  className="w-full h-full object-contain opacity-90 hover:opacity-100 transition-opacity" 
-                />
-             </div>
-          ) : <UnavailableData label="" />}
+          <div className="relative flex-1 min-h-[120px] rounded overflow-hidden border border-slate-800/60 mb-2">
+            <RiskHeatmapMap regionScores={regionScores} />
+          </div>
+          <div className="flex gap-2 text-[8px] font-bold text-slate-400 justify-center">
+            <span className="flex items-center gap-1"><div className="w-2 h-2 bg-red-500 rounded-sm"></div> Very High</span>
+            <span className="flex items-center gap-1"><div className="w-2 h-2 bg-amber-500 rounded-sm"></div> High</span>
+            <span className="flex items-center gap-1"><div className="w-2 h-2 bg-emerald-500 rounded-sm"></div> Low</span>
+          </div>
         </div>
 
         {/* GLOBAL SUPPLY BALANCE */}
         <div className="bg-[#182227] rounded-md flex-1 min-h-[150px] p-3 flex flex-col border border-slate-700/50">
           <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] mb-2 uppercase">GLOBAL SUPPLY BALANCE <span className="normal-case text-slate-400 text-[10px] font-bold">(Mton)</span></h3>
-          {DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
-             <GlobalSupplyBalanceChart />
-          ) : <UnavailableData label="" />}
+          <GlobalSupplyBalanceChart data={balance ?? undefined} />
         </div>
         
         <div className="bg-[#182227] rounded-md min-h-[150px] p-3 border border-slate-700/50">
@@ -387,73 +515,58 @@ function RiskItem({ label, value, trend, severity }: any) {
   );
 }
 
-function SupplyChainStatusOverview() {
+const STAGE_STYLES: Record<string, { badge: string; text: string; icon: React.ReactNode }> = {
+  Stable: { badge: 'bg-emerald-950/40 border-emerald-500/50 text-emerald-500', text: 'text-emerald-500', icon: <Activity size={10} /> },
+  Moderate: { badge: 'bg-amber-950/40 border-amber-500/50 text-amber-500', text: 'text-amber-500', icon: <Clock size={10} /> },
+  'At Risk': { badge: 'bg-amber-950/40 border-amber-500/50 text-amber-500', text: 'text-amber-500', icon: <TrendingDown size={10} /> },
+  Disrupted: { badge: 'bg-red-950/40 border-red-500/50 text-red-500', text: 'text-red-500', icon: <AlertTriangle size={10} /> },
+};
+
+// Live route health drives the Transportation / Ports / End Demand nodes; the
+// snapshot defaults keep the strip identical when no live status is available.
+function SupplyChainStatusOverview({ stages }: { stages: { transportation: StageStatus; ports: StageStatus; demand: StageStatus } | null }) {
+  const nodes: { label: string; status: string; icon?: React.ReactNode }[] = [
+    { label: 'Production', status: 'Stable' },
+    { label: 'Transportation', status: stages?.transportation ?? 'At Risk' },
+    { label: 'Ports & Terminals', status: stages ? (stages.ports === 'At Risk' ? 'Disrupted' : stages.ports) : 'Disrupted' },
+    { label: 'Refining', status: 'Stable' },
+    { label: 'Distribution', status: 'Stable', icon: <Package size={10} /> },
+    { label: 'End Demand', status: stages ? (stages.demand === 'At Risk' ? 'Moderate' : 'Stable') : 'Moderate' },
+  ];
+
   return (
     <div className="flex items-center justify-between h-full px-2 w-full">
-      <div className="flex flex-col items-center gap-1.5">
-        <div className="flex items-center gap-2">
-           <div className="w-5 h-5 rounded-full bg-emerald-950/40 border border-emerald-500/50 flex items-center justify-center text-emerald-500"><Activity size={10}/></div>
-           <span className="text-[11px] text-slate-200 font-bold">Production</span>
-        </div>
-        <span className="text-emerald-500 font-bold text-[10px]">Stable</span>
-      </div>
-      <span className="text-slate-500">→</span>
-      
-      <div className="flex flex-col items-center gap-1.5">
-        <div className="flex items-center gap-2">
-           <div className="w-5 h-5 rounded-full bg-amber-950/40 border border-amber-500/50 flex items-center justify-center text-amber-500"><TrendingDown size={10}/></div>
-           <span className="text-[11px] text-slate-200 font-bold">Transportation</span>
-        </div>
-        <span className="text-amber-500 font-bold text-[10px]">At Risk</span>
-      </div>
-      <span className="text-slate-500">→</span>
-      
-      <div className="flex flex-col items-center gap-1.5">
-        <div className="flex items-center gap-2">
-           <div className="w-5 h-5 rounded-full bg-red-950/40 border border-red-500/50 flex items-center justify-center text-red-500"><AlertTriangle size={10}/></div>
-           <span className="text-[11px] text-slate-200 font-bold">Ports & Terminals</span>
-        </div>
-        <span className="text-red-500 font-bold text-[10px]">Disrupted</span>
-      </div>
-      <span className="text-slate-500">→</span>
-      
-      <div className="flex flex-col items-center gap-1.5">
-        <div className="flex items-center gap-2">
-           <div className="w-5 h-5 rounded-full bg-emerald-950/40 border border-emerald-500/50 flex items-center justify-center text-emerald-500"><Activity size={10}/></div>
-           <span className="text-[11px] text-slate-200 font-bold">Refining</span>
-        </div>
-        <span className="text-emerald-500 font-bold text-[10px]">Stable</span>
-      </div>
-      <span className="text-slate-500">→</span>
-
-      <div className="flex flex-col items-center gap-1.5">
-        <div className="flex items-center gap-2">
-           <div className="w-5 h-5 rounded-full bg-emerald-950/40 border border-emerald-500/50 flex items-center justify-center text-emerald-500"><Package size={10}/></div>
-           <span className="text-[11px] text-slate-200 font-bold">Distribution</span>
-        </div>
-        <span className="text-emerald-500 font-bold text-[10px]">Stable</span>
-      </div>
-      <span className="text-slate-500">→</span>
-
-      <div className="flex flex-col items-center gap-1.5">
-        <div className="flex items-center gap-2">
-           <div className="w-5 h-5 rounded-full bg-amber-950/40 border border-amber-500/50 flex items-center justify-center text-amber-500"><Clock size={10}/></div>
-           <span className="text-[11px] text-slate-200 font-bold">End Demand</span>
-        </div>
-        <span className="text-amber-500 font-bold text-[10px]">Moderate</span>
-      </div>
+      {nodes.map((n, i) => {
+        const style = STAGE_STYLES[n.status] ?? STAGE_STYLES.Stable;
+        return (
+          <React.Fragment key={n.label}>
+            {i > 0 && <span className="text-slate-500">→</span>}
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="flex items-center gap-2">
+                <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${style.badge}`}>
+                  {n.icon ?? style.icon}
+                </div>
+                <span className="text-[11px] text-slate-200 font-bold">{n.label}</span>
+              </div>
+              <span className={`${style.text} font-bold text-[10px]`}>{n.status}</span>
+            </div>
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 }
 
-function GlobalNewsFeedHorizontal() {
-  const news = [
-    { time: '3h ago', text: 'US increases pressure on Iran on exports with new sanctions.', source: 'Reuters' },
-    { time: '3h ago', text: 'Tanker demurrage rates in Red Sea reach 38%.', source: 'Bloomberg' },
-    { time: '4h ago', text: 'West Africa ports face severe congestion.', source: 'Platts' },
-    { time: '5h ago', text: 'OPEC+ confirms output adjustment in June.', source: 'CNBC' },
-    { time: '6h ago', text: 'Asia LNG prices spike amid supply uncertainty.', source: 'Energy Connects' },
-  ];
+const DEFAULT_NEWS = [
+  { time: '3h ago', text: 'US increases pressure on Iran on exports with new sanctions.', source: 'Reuters' },
+  { time: '3h ago', text: 'Tanker demurrage rates in Red Sea reach 38%.', source: 'Bloomberg' },
+  { time: '4h ago', text: 'West Africa ports face severe congestion.', source: 'Platts' },
+  { time: '5h ago', text: 'OPEC+ confirms output adjustment in June.', source: 'CNBC' },
+  { time: '6h ago', text: 'Asia LNG prices spike amid supply uncertainty.', source: 'Energy Connects' },
+];
+
+function GlobalNewsFeedHorizontal({ news: liveNews }: { news?: { time: string; text: string; source: string }[] | null }) {
+  const news = liveNews && liveNews.length ? liveNews : DEFAULT_NEWS;
   return (
     <div className="flex gap-4 items-center overflow-x-auto no-scrollbar w-full h-full pb-1">
       {news.map((n, i) => (

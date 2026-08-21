@@ -1,12 +1,23 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { DATA_MODE } from '@/lib/config';
+import { HACKATHON_SYSTEM_HEALTH } from '@/data/snapshot';
+
+interface HealthData {
+  components?: Record<string, string>;
+}
 
 export function SystemHealthComponent() {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<HealthData | null>(DATA_MODE === 'HACKATHON_SNAPSHOT' ? HACKATHON_SYSTEM_HEALTH : null);
+  const [loading, setLoading] = useState(DATA_MODE !== 'HACKATHON_SNAPSHOT');
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/v1/health/components')
+    if (DATA_MODE === 'HACKATHON_SNAPSHOT') return;
+    // Deliberately NOT going through ApiClient: its snapshot fallback would
+    // report a healthy stack while the backend is down, which is exactly what
+    // a health panel must not do.
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+    fetch(`${base}/health/components`)
       .then(res => res.json())
       .then(json => {
         setData(json);
