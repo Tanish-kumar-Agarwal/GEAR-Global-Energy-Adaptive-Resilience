@@ -19,16 +19,24 @@ Every command below is copy-pasteable from the repository root. Order matters.
 
 ## 1. Environment file
 
-`apps/api/main.py` loads `.env` from the repository root. The values must match
-`infra/compose/docker-compose.yml`. In particular:
+`apps/api/main.py` loads `.env` from the repository root. `.env` is gitignored
+(it holds real credentials; see the Security section in README.md), so on a
+fresh clone create it from the template:
+
+```bash
+cp .env.example .env
+```
+
+The template's database values already match the local-dev defaults in
+`infra/compose/docker-compose.yml`; fill in `JWT_SECRET_KEY` and (optionally)
+`EIA_API_KEY`. In particular:
 
 ```
 NEO4J_PASSWORD=gear_neo4j_pass   # NOT "password" - must match NEO4J_AUTH in compose
 POSTGRES_DB=gear
 POSTGRES_USER=gear_user
 POSTGRES_PASSWORD=gear_pass
-REDIS_URL=redis://localhost:6379/0
-DEBUG=True
+CELERY_BROKER_URL=redis://localhost:6379/0
 ```
 
 A wrong `NEO4J_PASSWORD` does not crash the API; every graph endpoint just
