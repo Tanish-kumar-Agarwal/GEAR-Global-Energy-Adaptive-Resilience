@@ -101,11 +101,15 @@ cd apps/api
 ../../.venv/bin/python -m celery -A workers.celery_app worker --loglevel=info --concurrency=2
 ```
 
-Without a worker, `POST /scenarios/{id}/run` returns 202 and the job stays
-QUEUED forever. To run a second API+worker pair against the same Redis without
-the pairs stealing each other's jobs, give the pair its own queue:
+Without a worker, `POST /scenarios/{id}/run` fails fast with 503
+QUEUE_UNAVAILABLE (component `celery_worker`). To run a second API+worker pair
+against the same Redis without the pairs stealing each other's jobs, give the
+pair its own queue AND a unique node name:
 `CELERY_TASK_QUEUE=gear_geo` on the API process, and
-`CELERY_TASK_QUEUE=gear_geo ... worker -Q gear_geo` on the worker.
+`CELERY_TASK_QUEUE=gear_geo ... worker -Q gear_geo -n gear_geo@%h` on the
+worker. The `-n` matters: workers sharing the default node name overwrite each
+other in `inspect().active_queues()` replies, which makes the API's
+worker-availability check flap.
 
 ## 8. Web app
 
