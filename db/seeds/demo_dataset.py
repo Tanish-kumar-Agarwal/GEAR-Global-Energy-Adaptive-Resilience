@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
 from core.database import SessionLocal, engine
 from models.domain import (
     Base, Country, Commodity, Supplier, Route, Chokepoint, EnergyAsset, TradeFlow,
-    GeopoliticalEvent, RiskScore, OutboxEvent,
+    GeopoliticalEvent, RiskScore, OutboxEvent, MarketPrice,
 )
 
 
@@ -31,6 +31,8 @@ def seed_database():
         print("Starting deterministic seed...")
 
         # Clear existing data (children before parents)
+        # Market price observations reference commodities and must go first.
+        db.query(MarketPrice).delete()
         db.query(RiskScore).delete()
         db.query(OutboxEvent).delete()
         db.query(GeopoliticalEvent).delete()
@@ -232,6 +234,10 @@ def seed_database():
                     route.path = geo["path"]
                 if route.chokepoint_ids is None:
                     route.chokepoint_ids = geo["chokepoint_ids"]
+            if route.chokepoint_ids is None and route.chokepoint_id:
+                # Derivation needs trade flows; routes without any still carry
+                # their declared FK so scenario impact can reach them.
+                route.chokepoint_ids = [route.chokepoint_id]
 
         db.commit()
         print("Database seeded successfully with MVP dataset!")

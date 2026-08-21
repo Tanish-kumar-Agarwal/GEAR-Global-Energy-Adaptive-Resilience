@@ -21,3 +21,5 @@ bcrypt<4.1
 # FastAPI needs this to parse the OAuth2 login form.
 python-multipart
 python-dotenv
+# services/market_ingestion.py fetches live prices with it.
+requests

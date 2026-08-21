@@ -2,6 +2,14 @@
 
 Every command below is copy-pasteable from the repository root. Order matters.
 
+> **Treat the shared dev database as production.** Never run `alembic downgrade`,
+> `drop_all`, or destructive migration tests against it; a downgrade/upgrade
+> cycle recreates every table empty and takes both APIs and the map down with
+> it. Test migrations against a throwaway database instead, e.g.
+> `docker exec compose-postgres-1 createdb -U gear_user gear_migration_test`
+> and point `POSTGRES_DB=gear_migration_test` at it, or use a scratch sqlite
+> file. If the dev data is ever lost, section 4 below restores it in full.
+
 ## 0. Prerequisites
 
 - Docker (Desktop or colima). If `docker compose` says `unknown shorthand flag: 'd'`,
