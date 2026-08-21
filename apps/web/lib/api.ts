@@ -324,6 +324,22 @@ export class ApiClient {
     }
   }
 
+  // Strategy Lab
+  static async getStrategyOptions(): Promise<any> {
+    return this.request<any>('/strategy/options');
+  }
+
+  static async createStrategyScenario(data: { name: string; baseline_scenario_id: string; levers: { type: string; target_id: string }[] }): Promise<any> {
+    return this.request<any>('/strategy/scenarios', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  static async getStrategyScenario(id: string): Promise<any> {
+    return this.request<any>(`/strategy/scenarios/${id}`);
+  }
+
   // Optimization
   static async runProcurementOptimization(scenarioId: string): Promise<OptimizationResult> {
     return this.request<OptimizationResult>('/optimization/procurement', {
