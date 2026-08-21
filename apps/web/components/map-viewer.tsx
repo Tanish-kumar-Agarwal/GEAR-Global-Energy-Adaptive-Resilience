@@ -444,6 +444,8 @@ export function MapViewer({
       attributionControl: false,
     });
     map.current = m;
+    // Test handle for browser-level verification of map data (main map only).
+    if (typeof window !== 'undefined') (window as { __gearMap?: maplibregl.Map }).__gearMap = m;
 
     const applyVisibility = () => {
       const vis = visibleRef.current;

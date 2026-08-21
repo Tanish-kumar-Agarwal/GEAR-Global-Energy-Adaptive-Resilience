@@ -130,6 +130,14 @@ function noteFallback(endpoint: string) {
   fallbackListeners.forEach(cb => cb([...fallbackEndpoints]));
 }
 
+// A live success clears the endpoint's fallback flag, so the badge disappears
+// as soon as real data is flowing again instead of sticking forever.
+function noteLiveSuccess(endpoint: string) {
+  if (fallbackEndpoints.delete(endpoint)) {
+    fallbackListeners.forEach(cb => cb([...fallbackEndpoints]));
+  }
+}
+
 // One login at a time; every caller awaits the same promise.
 let loginPromise: Promise<string | null> | null = null;
 
@@ -166,7 +174,9 @@ export class ApiClient {
     }
 
     try {
-      return await this.liveRequest<T>(endpoint, options);
+      const result = await this.liveRequest<T>(endpoint, options);
+      noteLiveSuccess(endpoint);
+      return result;
     } catch (err) {
       const canned = snapshotResponse(endpoint, options);
       if (canned !== undefined) {
