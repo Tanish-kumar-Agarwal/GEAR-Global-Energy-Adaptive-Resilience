@@ -83,17 +83,8 @@ function snapshotResponse(endpoint: string, options?: RequestInit): unknown {
       ],
     };
   }
-  if (endpoint.startsWith('/market/prices')) {
-    return {
-      status: 'ok',
-      prices: [
-        { name: 'Brent Crude', price: 64.82, change_pct: 2.35 },
-        { name: 'WTI Crude', price: 61.47, change_pct: 2.18 },
-        { name: 'LNG (JKM)', price: 12.34, change_pct: 1.92 },
-        { name: 'Coal (API2)', price: 104.6, change_pct: -0.45 },
-      ],
-    };
-  }
+  // Real values captured from the EIA API; see HACKATHON_MARKET_PRICES.
+  if (endpoint.startsWith('/market/prices')) return snapshot.HACKATHON_MARKET_PRICES;
   if (endpoint.startsWith('/market/reserve-coverage')) {
     return { status: 'ok', countries: [{ country_id: 'IND', status: 'ok', coverage_days: 9.8, target_days: 90 }] };
   }
@@ -108,6 +99,20 @@ function snapshotResponse(endpoint: string, options?: RequestInit): unknown {
   if (endpoint.startsWith('/intelligence/events')) return snapshot.HACKATHON_INTEL_EVENTS;
   if (endpoint.startsWith('/graph/dependencies')) return snapshot.HACKATHON_GRAPH_DEPENDENCIES;
   if (endpoint.startsWith('/health/components')) return { status: 'healthy', ...snapshot.HACKATHON_SYSTEM_HEALTH };
+  // Strategy Lab flows, backed by payloads captured from real backend runs.
+  if (endpoint === '/strategy/options') return snapshot.HACKATHON_STRATEGY_OPTIONS;
+  if (endpoint === '/strategy/scenarios' && options?.method === 'POST') {
+    return { strategy_id: 'STRAT-SNAPSHOT-001', status: 'QUEUED' };
+  }
+  if (/^\/strategy\/scenarios\/[^/]+$/.test(endpoint)) return snapshot.HACKATHON_STRATEGY_RESULT;
+  if (endpoint === '/optimization/procurement' && options?.method === 'POST') {
+    return { job_id: 'JOB-OPT-SNAPSHOT-001', status: 'QUEUED' };
+  }
+  if (/^\/optimization\/[^/]+$/.test(endpoint)) return snapshot.HACKATHON_OPTIMIZATION_RESULT;
+  if (endpoint.startsWith('/decisions/pending')) return [];
+  // Empty live-sources list: the data-intelligence page then renders its own
+  // static source catalog without touching the network.
+  if (endpoint.startsWith('/intelligence/data-sources')) return { sources: [] };
   return undefined;
 }
 

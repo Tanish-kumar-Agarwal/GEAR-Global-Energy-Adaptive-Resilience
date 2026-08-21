@@ -12,6 +12,9 @@ networkx
 scikit-learn
 xgboost
 ortools
+# services/market_data_service.py needs CA certs for the EIA API on Python
+# installs without system certificates.
+certifi
 # Auth stack: imported by core/security.py and routes/auth.py at startup.
 pyjwt
 passlib

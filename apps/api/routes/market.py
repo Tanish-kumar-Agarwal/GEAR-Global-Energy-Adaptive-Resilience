@@ -5,6 +5,7 @@ from typing import Optional
 
 from core.database import get_db
 from models.domain import Scenario, Job
+from services.market_data_service import get_live_prices
 from services.market_service import MarketService
 
 router = APIRouter(prefix="/api/v1/market", tags=["Market"])
@@ -37,7 +38,16 @@ def get_reserve_coverage(
 
 @router.get("/prices")
 def get_prices(db: Session = Depends(get_db), user: User = Depends(RequirePermissions("world:read"))):
-    return MarketService(db).get_prices()
+    # Ingested observations first: they carry per-row source and staleness.
+    result = MarketService(db).get_prices()
+    if result.get("status") == "ok":
+        return result
+    # Nothing ingested yet: fetch spot prices live from the EIA API instead
+    # (needs EIA_API_KEY; see .env.example).
+    live = get_live_prices()
+    if live is not None:
+        return live
+    return result
 
 @router.get("/balance-timeseries")
 def get_balance_timeseries(

@@ -3,8 +3,8 @@
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { Activity, Loader2, Download, Share2, Search, AlertTriangle, Anchor, Globe, Clock, Zap, MapPin, BarChart2, Gauge, ArrowDownCircle, DollarSign, Flame, Building, Ship, Factory, Copy } from 'lucide-react';
 import { MapViewer, SelectedMapFeature, MapAssetInput } from '@/components/map-viewer';
-import { SnapshotFallbackBadge } from '@/components/snapshot-badge';
 import { TargetMiniMap, MiniMapTarget } from '@/components/target-mini-map';
+import { DATA_MODE } from '@/lib/config';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { ApiClient } from '@/lib/api';
 import { useJobPolling } from '@/lib/useJobPolling';
@@ -460,8 +460,6 @@ function ScenarioLabContent() {
 
   return (
     <div className="h-full min-h-[850px] min-w-[1280px] w-full bg-[#0f181b] p-3 flex flex-col gap-3 text-slate-300 font-sans">
-
-      <SnapshotFallbackBadge />
 
       {/* TOAST */}
       {toast && (
@@ -938,9 +936,16 @@ function ScenarioLabContent() {
                <span>Scenario ID: {scenarioId || 'Not yet run'}</span>
                <button onClick={copyScenarioId} title="Copy Scenario ID"><Copy size={12} className="cursor-pointer hover:text-slate-300" /></button>
                {results && runMode === 'snapshot' && (
-                 <span className="ml-2 rounded border border-red-500/80 bg-red-950/80 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-red-300">
-                   OFFLINE SNAPSHOT RUN, NOT A LIVE SIMULATION
-                 </span>
+                 DATA_MODE === 'HACKATHON_SNAPSHOT' ? (
+                   // Deliberate demo build: honest but calm, nothing is broken.
+                   <span className="ml-2 rounded border border-slate-600/70 bg-slate-900/90 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-slate-300">
+                     DEMO DATA RUN
+                   </span>
+                 ) : (
+                   <span className="ml-2 rounded border border-red-500/80 bg-red-950/80 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-red-300">
+                     OFFLINE SNAPSHOT RUN, NOT A LIVE SIMULATION
+                   </span>
+                 )
                )}
                {results && runMode === 'sync_fallback' && (
                  <span className="ml-2 rounded border border-amber-500/80 bg-amber-950/80 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-amber-300">

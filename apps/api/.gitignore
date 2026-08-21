@@ -1,0 +1,2 @@
+# Secrets stay local; commit .env.example instead.
+.env

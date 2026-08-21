@@ -1,7 +1,11 @@
 // LIVE hits the FastAPI backend and falls back to the hackathon snapshot per
 // request when the backend is unreachable, so the demo never goes blank.
-// HACKATHON_SNAPSHOT never touches the network at all.
-export const DATA_MODE: 'HACKATHON_SNAPSHOT' | 'LIVE' = 'LIVE';
+// HACKATHON_SNAPSHOT never touches the backend at all and is the DEFAULT, so
+// a plain production build (e.g. the Vercel demo deployment with no env vars)
+// is a self-contained snapshot build. Local dev opts into LIVE via
+// NEXT_PUBLIC_DATA_MODE=LIVE in .env.local.
+export const DATA_MODE: 'HACKATHON_SNAPSHOT' | 'LIVE' =
+  process.env.NEXT_PUBLIC_DATA_MODE === 'LIVE' ? 'LIVE' : 'HACKATHON_SNAPSHOT';
 
 // Demo-only auto-login: the backend seeds this account on startup (see
 // apps/api/main.py seed_admin_user). Real deployments must go through /login.

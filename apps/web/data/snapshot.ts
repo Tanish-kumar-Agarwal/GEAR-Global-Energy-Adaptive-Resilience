@@ -310,6 +310,27 @@ export const HACKATHON_MAP_ASSETS: MapAsset[] = [
   { id: 'AST_OKINAWA', name: 'Okinawa Storage', type: 'STORAGE', lat: 26.3, lng: 127.7, capacity: 5 },
 ];
 
+// -----------------------------------------------------------------------------
+// MARKET PRICES - REAL VALUES, captured from the EIA API v2 (api.eia.gov) on
+// 2026-08-22. Series: RBRTE (Europe Brent spot FOB, $/bbl), RWTC (Cushing WTI
+// spot, $/bbl), RNGWHHD (Henry Hub natural gas spot, $/MMBtu),
+// EER_EPD2DXL0_PF4_Y35NY_DPG (NY Harbor ULSD diesel spot, $/gal). Latest
+// trading day in the feed was 2026-08-18; change_pct is vs the prior trading
+// day. Static once captured: a snapshot build shows these as of the capture
+// date, it does not refetch.
+// -----------------------------------------------------------------------------
+export const HACKATHON_MARKET_PRICES = {
+  status: 'ok',
+  as_of: '2026-08-18',
+  captured: '2026-08-22',
+  prices: [
+    { name: 'Brent Crude', price: 95.29, change_pct: 3.09 },
+    { name: 'WTI Crude', price: 86.48, change_pct: 0.51 },
+    { name: 'Henry Hub Gas', price: 2.82, change_pct: 1.81 },
+    { name: 'Diesel (NYH)', price: 4.55, change_pct: 0.4 },
+  ],
+};
+
 export const HACKATHON_SUPPLY_BALANCE = [
   { date: 'May 18', Supply: 112, Demand: 76, AtRisk: 42 },
   { date: 'May 19', Supply: 110, Demand: 74, AtRisk: 44 },
@@ -321,4 +342,330 @@ export const HACKATHON_SUPPLY_BALANCE = [
   { date: 'May 25', Supply: 115, Demand: 74, AtRisk: 48 },
   { date: 'May 26', Supply: 111, Demand: 78, AtRisk: 35 },
   { date: 'May 27', Supply: 113, Demand: 79, AtRisk: 42 },
+];
+
+// -----------------------------------------------------------------------------
+// STRATEGY LAB DEMO DATA
+// Captured verbatim from real backend runs on 2026-08-22 (strategy overlay via
+// POST /strategy/scenarios, procurement optimizer via POST
+// /optimization/procurement against the CHK_MALACCA 70% baseline). Served in
+// snapshot mode so the deployed demo works with zero backend; ids are
+// normalized to SNAPSHOT markers.
+// -----------------------------------------------------------------------------
+
+export const HACKATHON_STRATEGY_OPTIONS = {
+  "status": "AVAILABLE",
+  "supplier_diversification": true,
+  "route_diversification": true,
+  "reserve_strategy": true,
+  "chokepoint_diversification": true,
+  "financial_optimization": "DATA_UNAVAILABLE"
+};
+
+export const HACKATHON_STRATEGY_RESULT = {
+  "id": "STRAT-SNAPSHOT-001",
+  "name": "Strategic Diversification Plan",
+  "baseline_scenario_id": "baseline-default",
+  "status": "COMPLETED",
+  "levers": [
+    {
+      "type": "supplier_diversification",
+      "target_id": "SUP_002"
+    },
+    {
+      "type": "route_diversification",
+      "target_id": "RT_HORMUZ_INDIA"
+    }
+  ],
+  "result": {
+    "status": "completed",
+    "strategy_id": "STRAT-SNAPSHOT-001",
+    "scenario_id": "baseline-default",
+    "resilience": {
+      "supply_resilience": {
+        "score": "DATA_UNAVAILABLE",
+        "reason": "Requires full graph re-simulation"
+      },
+      "route_resilience": {
+        "score": "DATA_UNAVAILABLE"
+      },
+      "dependency_concentration": {
+        "status": "DATA_UNAVAILABLE",
+        "reason": "Requires graph re-simulation; not yet computed"
+      }
+    },
+    "economic_impact": {
+      "status": "DATA_UNAVAILABLE",
+      "avoided_loss": "DATA_UNAVAILABLE",
+      "reason": "CapEx and route costs are missing from authoritative inputs"
+    },
+    "assumptions": [
+      "Assumes baseline demand remains constant",
+      "Financial costs excluded due to missing authoritative data"
+    ],
+    "provenance": [
+      {
+        "source": "StrategyOverlay",
+        "action": "supplier_diversification",
+        "target": "SUP_002",
+        "timestamp": "2026-08-21T19:18:02.422487+00:00"
+      },
+      {
+        "source": "StrategyOverlay",
+        "action": "route_diversification",
+        "target": "RT_HORMUZ_INDIA",
+        "timestamp": "2026-08-21T19:18:02.426436+00:00"
+      }
+    ],
+    "strategic_state": {
+      "affected_suppliers": [
+        "SUP_002"
+      ]
+    }
+  },
+  "created_at": "2026-08-21T19:18:02.304237"
+};
+
+export const HACKATHON_OPTIMIZATION_RESULT = {
+  "job_id": "JOB-OPT-SNAPSHOT-001",
+  "status": "COMPLETED",
+  "result": {
+    "scenario_id": "3a84cb58-4328-43d4-ab3e-ccf097b8eaa8",
+    "status": "completed",
+    "strategy_id": "d79e741c-3e7b-4884-96a8-7e71d9d865b3",
+    "objective": {
+      "baseline_shortage": 3.64,
+      "optimized_shortage": 1.45,
+      "improvement": 2.19
+    },
+    "allocations": {
+      "route_flows": {
+        "RT_BALTIC_INDIA": 0.0,
+        "RT_CAPE_EUROPE": 0.0,
+        "RT_HORMUZ_CHINA": 1.9500000000000002,
+        "RT_HORMUZ_INDIA": 1.4466666666666668,
+        "RT_HORMUZ_JAPAN": 0.0,
+        "RT_REDSEA_EUROPE": 0.0,
+        "RT_US_ASIA": 1.5
+      },
+      "reserve_drawdowns": {
+        "STR_VISAKHAPATNAM": 0.3266666666666667,
+        "STR_MANGALORE": 0.36666666666666664,
+        "STR_PADUR": 0.61,
+        "STR_JPN_NATIONAL": 1.8,
+        "STR_NLD_APETRA": 0.8
+      }
+    },
+    "reserve_usage": {
+      "shortages": {
+        "IND": 0.0,
+        "CHN": 1.4500000000000002,
+        "JPN": 0.0,
+        "NLD": 0.0
+      }
+    },
+    "economic_impact": {
+      "status": "completed",
+      "currency": "USD",
+      "impact": {
+        "total": 4.09,
+        "supply_shortage": 4.09,
+        "price_impact": "data_unavailable",
+        "replacement_procurement": "data_unavailable",
+        "logistics": "data_unavailable",
+        "reserve": "data_unavailable"
+      },
+      "unpriced_components": {
+        "price_impact": "requires a price elasticity curve for the disrupted volume",
+        "replacement_procurement": "requires spot premium quotes for replacement cargoes",
+        "logistics": "requires freight rates for the alternative routing"
+      },
+      "price_source": {
+        "symbol": "BRENT",
+        "name": "Brent Crude (ICE front month)",
+        "price": 94.04,
+        "currency": "USD",
+        "unit": "USD/bbl",
+        "observed_at": "2026-08-21T13:41:58+00:00",
+        "source_id": "YAHOO_FINANCE_CHART_V8",
+        "source_ref": "https://query1.finance.yahoo.com/v8/finance/chart/BZ=F"
+      },
+      "physical_impact": {
+        "supply_gap": 1.4500000000000002,
+        "duration": 30
+      },
+      "uncertainty": {
+        "status": "available",
+        "p10": 4.09,
+        "p50": 4.09,
+        "p90": 4.09,
+        "sample_count": 1
+      },
+      "assumptions": [
+        {
+          "name": "disruption_duration",
+          "value": 30,
+          "unit": "days",
+          "source": "scenario",
+          "type": "scenario_parameter"
+        },
+        {
+          "name": "commodity_price",
+          "value": 94.04,
+          "unit": "USD/bbl",
+          "source": "YAHOO_FINANCE_CHART_V8",
+          "observed_at": "2026-08-21T13:41:58+00:00",
+          "type": "market_observation"
+        }
+      ],
+      "missing_inputs": [],
+      "data_sources": [
+        "Deterministic Cascade Simulation",
+        "PostgreSQL Baseline Trade Flows",
+        "PostgreSQL market_prices"
+      ],
+      "confidence": "high (deterministic simulation with bounded assumptions)",
+      "methodology": "Expected Shortage Cost = P50 Supply Gap x Duration x Commodity Price. Reserve value = min(storage capacity, daily gap x duration) x Commodity Price."
+    },
+    "resilience": {
+      "diversification": {
+        "utilized_route_count": 3,
+        "utilized_reserve_count": 5
+      }
+    },
+    "avoided_loss": 5.84,
+    "constraints": [
+      "Route capacities",
+      "Reserve capacities",
+      "Demand satisfaction"
+    ],
+    "assumptions": [
+      "Storage draws are linear over duration",
+      "Routes the cascade marked as disrupted keep capacity * (1 - severity); all other routes are fully accessible"
+    ],
+    "provenance": [
+      "PostgreSQL EnergyAsset",
+      "PostgreSQL Route",
+      "Phase 4.3 Cascade"
+    ],
+    "methodology": "OR-Tools GLOP optimization minimizing physical unmet demand."
+  }
+};
+
+// -----------------------------------------------------------------------------
+// PAGE 5 DEMO TELEMETRY (Data Intelligence & System Health)
+//
+// DEMO DATA, NOT MEASURED. The backend has no ingestion/pipeline telemetry at
+// all (no /intelligence/data-sources, no pipeline, quality, or host-metric
+// endpoints; verified 404). Everything below is an invented but internally
+// consistent operations story, rendered ONLY in HACKATHON_SNAPSHOT builds
+// where the global DEMO DATA badge discloses it. LIVE mode must never show
+// these numbers; the page renders explicit unavailable states instead.
+//
+// The story (all panels agree on it): morning of 2026-08-22 UTC. The World
+// Bank feed has been down since 2026-08-19, ACLED and Comtrade are lagging,
+// the other five sources are green.
+//
+// Consistency ledger, audited by hand:
+//   pipelines per source 4+4+3+4+3+2+2+2            = 24 total
+//   health 19 healthy + 3 warning + 2 critical      = 24
+//   runs last 24h: 284 of 288 succeeded             = 98.6% success, 4 failed
+//   failure breakdown 2 timeouts + 1 validation
+//     + 1 processing + 0 unknown                    = 4 failed runs
+//   ingested/day = sum of per-source records/day    = 11.13M
+//   processed last 24h                              = 10.98M (98.6% of 11.13M)
+//   hourly ingestion series sums to 11,130K; processed = ingested * 0.986
+//   quality 87 = mean(completeness 92, validity 94, freshness 76, consistency 86)
+//   top-5 pipeline volumes each <= their source's records/day
+// -----------------------------------------------------------------------------
+
+export interface DemoIngestionSource {
+  name: string;
+  status: 'OK (Green)' | 'Lagging' | 'Error';
+  lastSync: string;      // UTC, fixed demo timestamp
+  recordsPerDay: number; // records ingested per day
+  reliability: number;   // 0-100, 30-day fetch reliability
+  pipelines: number;
+}
+
+export const HACKATHON_INGESTION_SOURCES: DemoIngestionSource[] = [
+  { name: 'EIA', status: 'OK (Green)', lastSync: '2026-08-22 09:47:12', recordsPerDay: 2_840_000, reliability: 98, pipelines: 4 },
+  { name: 'GDELT', status: 'OK (Green)', lastSync: '2026-08-22 09:52:30', recordsPerDay: 2_310_000, reliability: 96, pipelines: 4 },
+  { name: 'Open-Meteo', status: 'OK (Green)', lastSync: '2026-08-22 09:55:04', recordsPerDay: 1_920_000, reliability: 95, pipelines: 3 },
+  { name: 'IEA (Baseline)', status: 'OK (Green)', lastSync: '2026-08-22 08:15:41', recordsPerDay: 1_780_000, reliability: 97, pipelines: 4 },
+  { name: 'GEM', status: 'OK (Green)', lastSync: '2026-08-22 09:20:18', recordsPerDay: 1_140_000, reliability: 94, pipelines: 3 },
+  { name: 'Comtrade', status: 'Lagging', lastSync: '2026-08-22 01:12:09', recordsPerDay: 615_000, reliability: 88, pipelines: 2 },
+  { name: 'ACLED', status: 'Lagging', lastSync: '2026-08-22 03:41:56', recordsPerDay: 528_000, reliability: 86, pipelines: 2 },
+  { name: 'World Bank', status: 'Error', lastSync: '2026-08-19 22:23:35', recordsPerDay: 0, reliability: 41, pipelines: 2 },
+];
+
+export const HACKATHON_PIPELINE_OVERVIEW = {
+  totalPipelines: 24,
+  runsLast24h: 288,
+  succeededLast24h: 284,
+  successRatePct: 98.6,
+  failedRunsLast24h: 4,
+  avgIngestionLatencyMin: 12.4,
+  avgProcessingTimeSec: 18.7,
+  recordsProcessedLast24h: 10_980_000,
+};
+
+export const HACKATHON_PIPELINE_HEALTH = [
+  { name: 'Healthy', value: 19, color: '#10b981' },
+  { name: 'Warning', value: 3, color: '#f59e0b' },
+  { name: 'Critical', value: 2, color: '#ef4444' },
+];
+
+export const HACKATHON_FAILURE_BREAKDOWN = [
+  { name: 'Source Timeout', value: 2, fill: '#ef4444' },
+  { name: 'Data Validation', value: 1, fill: '#f59e0b' },
+  { name: 'Processing Error', value: 1, fill: '#f59e0b' },
+  { name: 'Unknown', value: 0, fill: '#475569' },
+];
+
+// Hourly ingestion, records per hour across 2026-08-21 10:00 -> 2026-08-22
+// 10:00 UTC. The 24 ingested values sum to 11,130K (= 11.13M/day above).
+const HOURLY_INGESTED_K = [
+  310, 295, 300, 320, 340, 365, 405, 450, 500, 545, 580, 610,
+  635, 660, 680, 655, 610, 555, 495, 440, 395, 360, 335, 290,
+];
+
+export const HACKATHON_INGESTION_VOLUME_24H = HOURLY_INGESTED_K.map((k, i) => ({
+  hour: `${String(i).padStart(2, '0')}:00`,
+  ingested: k * 1000,
+  processed: Math.round(k * 0.986) * 1000,
+}));
+
+export const HACKATHON_DATA_QUALITY = {
+  score: 87, // mean of the four components below
+  band: 'Good',
+  components: [
+    { name: 'Completeness', value: 92 },
+    { name: 'Validity', value: 94 },
+    { name: 'Freshness', value: 76 }, // dragged down by ACLED, Comtrade, World Bank
+    { name: 'Consistency', value: 86 },
+  ],
+};
+
+export const HACKATHON_TOP_PIPELINES = [
+  { name: 'EIA - Petroleum bulk', volume: 1_620_000 },
+  { name: 'GDELT - Events', volume: 1_310_000 },
+  { name: 'Open-Meteo - Forecast grid', volume: 1_120_000 },
+  { name: 'EIA - Electricity', volume: 980_000 },
+  { name: 'IEA - Monthly balances', volume: 940_000 },
+];
+
+export const HACKATHON_PIPELINE_ALERTS = [
+  { time: '2026-08-22 09:58:41', pipeline: 'Open-Meteo - Forecast grid', severity: 'Warning', event: 'Processing Error', details: 'Run OM-1422 failed in transform stage; retry queued' },
+  { time: '2026-08-22 09:45:00', pipeline: 'ACLED - Events', severity: 'Warning', event: 'Validation Failed', details: '214 rows failed schema validation; batch quarantined, feed 6h behind' },
+  { time: '2026-08-22 01:30:12', pipeline: 'Comtrade - Tariff lines', severity: 'Warning', event: 'Data Delayed', details: 'Monthly tariff batch 9h behind schedule' },
+  { time: '2026-08-20 06:15:00', pipeline: 'World Bank - WDI', severity: 'Critical', event: 'Source Timeout', details: 'Retry window exhausted after 8 attempts' },
+  { time: '2026-08-19 22:23:35', pipeline: 'World Bank - WDI', severity: 'Critical', event: 'Connection Failed', details: 'Unable to reach api.worldbank.org; TLS handshake timeout' },
+];
+
+// Fixed 12-point sparklines; values hover around the stated utilization.
+export const HACKATHON_SYSTEM_RESOURCES = [
+  { name: 'CPU Usage', pct: 42, spark: [38, 41, 44, 40, 39, 43, 46, 42, 40, 44, 41, 42] },
+  { name: 'Memory Usage', pct: 68, spark: [64, 65, 67, 66, 68, 70, 69, 68, 67, 69, 68, 68] },
+  { name: 'Disk I/O', pct: 53, spark: [48, 51, 55, 60, 52, 49, 54, 57, 51, 50, 53, 53] },
 ];
