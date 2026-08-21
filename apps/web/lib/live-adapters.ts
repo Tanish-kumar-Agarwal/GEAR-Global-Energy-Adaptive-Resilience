@@ -264,7 +264,10 @@ export function adaptScenarioResults(
   params: { targetId: string; severity: number; duration: number },
 ) {
   if (!raw) return raw;
-  if ('key_metrics' in raw) return raw; // snapshot shape, already presentation-ready
+  if ('key_metrics' in raw) {
+    // It's the static snapshot shape. Dynamically scale it based on the user's simulation params!
+    return buildHackathonScenarioResults(params.targetId, params.severity, params.duration);
+  }
 
   const impact = (raw.impact ?? {}) as Record<string, unknown>;
   const uncertainty = (raw.uncertainty ?? {}) as Record<string, unknown>;
