@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { Loader2, Check, ChevronDown, AlertTriangle, Info } from 'lucide-react';
 import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ApiClient } from '@/lib/api';
-import { SnapshotFallbackBadge } from '@/components/snapshot-badge';
 
 // ---------------------------------------------------------------------------
 // VALUE ARCHITECTURE (project honesty standard, do not weaken):
@@ -322,8 +321,6 @@ export default function StrategyLab() {
 
   return (
     <div className="h-full min-h-[900px] min-w-[1280px] w-full bg-[#0f181b] p-3 flex gap-3 text-slate-300 font-sans">
-      <SnapshotFallbackBadge />
-
       {/* LEFT: CONFIGURATION */}
       <div className="w-[300px] flex flex-col flex-shrink-0 bg-[#182227] rounded-md border border-slate-700/50 overflow-y-auto no-scrollbar shadow-sm">
         <div className="p-3 border-b border-slate-700/50 font-medium text-[11px] uppercase tracking-wider text-slate-400 bg-slate-800/50">

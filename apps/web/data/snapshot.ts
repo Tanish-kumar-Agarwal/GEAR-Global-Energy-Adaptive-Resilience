@@ -322,3 +322,211 @@ export const HACKATHON_SUPPLY_BALANCE = [
   { date: 'May 26', Supply: 111, Demand: 78, AtRisk: 35 },
   { date: 'May 27', Supply: 113, Demand: 79, AtRisk: 42 },
 ];
+
+// -----------------------------------------------------------------------------
+// STRATEGY LAB DEMO DATA
+// Captured verbatim from real backend runs on 2026-08-22 (strategy overlay via
+// POST /strategy/scenarios, procurement optimizer via POST
+// /optimization/procurement against the CHK_MALACCA 70% baseline). Served in
+// snapshot mode so the deployed demo works with zero backend; ids are
+// normalized to SNAPSHOT markers.
+// -----------------------------------------------------------------------------
+
+export const HACKATHON_STRATEGY_OPTIONS = {
+  "status": "AVAILABLE",
+  "supplier_diversification": true,
+  "route_diversification": true,
+  "reserve_strategy": true,
+  "chokepoint_diversification": true,
+  "financial_optimization": "DATA_UNAVAILABLE"
+};
+
+export const HACKATHON_STRATEGY_RESULT = {
+  "id": "STRAT-SNAPSHOT-001",
+  "name": "Strategic Diversification Plan",
+  "baseline_scenario_id": "baseline-default",
+  "status": "COMPLETED",
+  "levers": [
+    {
+      "type": "supplier_diversification",
+      "target_id": "SUP_002"
+    },
+    {
+      "type": "route_diversification",
+      "target_id": "RT_HORMUZ_INDIA"
+    }
+  ],
+  "result": {
+    "status": "completed",
+    "strategy_id": "STRAT-SNAPSHOT-001",
+    "scenario_id": "baseline-default",
+    "resilience": {
+      "supply_resilience": {
+        "score": "DATA_UNAVAILABLE",
+        "reason": "Requires full graph re-simulation"
+      },
+      "route_resilience": {
+        "score": "DATA_UNAVAILABLE"
+      },
+      "dependency_concentration": {
+        "status": "DATA_UNAVAILABLE",
+        "reason": "Requires graph re-simulation; not yet computed"
+      }
+    },
+    "economic_impact": {
+      "status": "DATA_UNAVAILABLE",
+      "avoided_loss": "DATA_UNAVAILABLE",
+      "reason": "CapEx and route costs are missing from authoritative inputs"
+    },
+    "assumptions": [
+      "Assumes baseline demand remains constant",
+      "Financial costs excluded due to missing authoritative data"
+    ],
+    "provenance": [
+      {
+        "source": "StrategyOverlay",
+        "action": "supplier_diversification",
+        "target": "SUP_002",
+        "timestamp": "2026-08-21T19:18:02.422487+00:00"
+      },
+      {
+        "source": "StrategyOverlay",
+        "action": "route_diversification",
+        "target": "RT_HORMUZ_INDIA",
+        "timestamp": "2026-08-21T19:18:02.426436+00:00"
+      }
+    ],
+    "strategic_state": {
+      "affected_suppliers": [
+        "SUP_002"
+      ]
+    }
+  },
+  "created_at": "2026-08-21T19:18:02.304237"
+};
+
+export const HACKATHON_OPTIMIZATION_RESULT = {
+  "job_id": "JOB-OPT-SNAPSHOT-001",
+  "status": "COMPLETED",
+  "result": {
+    "scenario_id": "3a84cb58-4328-43d4-ab3e-ccf097b8eaa8",
+    "status": "completed",
+    "strategy_id": "d79e741c-3e7b-4884-96a8-7e71d9d865b3",
+    "objective": {
+      "baseline_shortage": 3.64,
+      "optimized_shortage": 1.45,
+      "improvement": 2.19
+    },
+    "allocations": {
+      "route_flows": {
+        "RT_BALTIC_INDIA": 0.0,
+        "RT_CAPE_EUROPE": 0.0,
+        "RT_HORMUZ_CHINA": 1.9500000000000002,
+        "RT_HORMUZ_INDIA": 1.4466666666666668,
+        "RT_HORMUZ_JAPAN": 0.0,
+        "RT_REDSEA_EUROPE": 0.0,
+        "RT_US_ASIA": 1.5
+      },
+      "reserve_drawdowns": {
+        "STR_VISAKHAPATNAM": 0.3266666666666667,
+        "STR_MANGALORE": 0.36666666666666664,
+        "STR_PADUR": 0.61,
+        "STR_JPN_NATIONAL": 1.8,
+        "STR_NLD_APETRA": 0.8
+      }
+    },
+    "reserve_usage": {
+      "shortages": {
+        "IND": 0.0,
+        "CHN": 1.4500000000000002,
+        "JPN": 0.0,
+        "NLD": 0.0
+      }
+    },
+    "economic_impact": {
+      "status": "completed",
+      "currency": "USD",
+      "impact": {
+        "total": 4.09,
+        "supply_shortage": 4.09,
+        "price_impact": "data_unavailable",
+        "replacement_procurement": "data_unavailable",
+        "logistics": "data_unavailable",
+        "reserve": "data_unavailable"
+      },
+      "unpriced_components": {
+        "price_impact": "requires a price elasticity curve for the disrupted volume",
+        "replacement_procurement": "requires spot premium quotes for replacement cargoes",
+        "logistics": "requires freight rates for the alternative routing"
+      },
+      "price_source": {
+        "symbol": "BRENT",
+        "name": "Brent Crude (ICE front month)",
+        "price": 94.04,
+        "currency": "USD",
+        "unit": "USD/bbl",
+        "observed_at": "2026-08-21T13:41:58+00:00",
+        "source_id": "YAHOO_FINANCE_CHART_V8",
+        "source_ref": "https://query1.finance.yahoo.com/v8/finance/chart/BZ=F"
+      },
+      "physical_impact": {
+        "supply_gap": 1.4500000000000002,
+        "duration": 30
+      },
+      "uncertainty": {
+        "status": "available",
+        "p10": 4.09,
+        "p50": 4.09,
+        "p90": 4.09,
+        "sample_count": 1
+      },
+      "assumptions": [
+        {
+          "name": "disruption_duration",
+          "value": 30,
+          "unit": "days",
+          "source": "scenario",
+          "type": "scenario_parameter"
+        },
+        {
+          "name": "commodity_price",
+          "value": 94.04,
+          "unit": "USD/bbl",
+          "source": "YAHOO_FINANCE_CHART_V8",
+          "observed_at": "2026-08-21T13:41:58+00:00",
+          "type": "market_observation"
+        }
+      ],
+      "missing_inputs": [],
+      "data_sources": [
+        "Deterministic Cascade Simulation",
+        "PostgreSQL Baseline Trade Flows",
+        "PostgreSQL market_prices"
+      ],
+      "confidence": "high (deterministic simulation with bounded assumptions)",
+      "methodology": "Expected Shortage Cost = P50 Supply Gap x Duration x Commodity Price. Reserve value = min(storage capacity, daily gap x duration) x Commodity Price."
+    },
+    "resilience": {
+      "diversification": {
+        "utilized_route_count": 3,
+        "utilized_reserve_count": 5
+      }
+    },
+    "avoided_loss": 5.84,
+    "constraints": [
+      "Route capacities",
+      "Reserve capacities",
+      "Demand satisfaction"
+    ],
+    "assumptions": [
+      "Storage draws are linear over duration",
+      "Routes the cascade marked as disrupted keep capacity * (1 - severity); all other routes are fully accessible"
+    ],
+    "provenance": [
+      "PostgreSQL EnergyAsset",
+      "PostgreSQL Route",
+      "Phase 4.3 Cascade"
+    ],
+    "methodology": "OR-Tools GLOP optimization minimizing physical unmet demand."
+  }
+};

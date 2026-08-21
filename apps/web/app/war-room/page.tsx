@@ -6,7 +6,6 @@ import { RiskTrendChart, RiskExposures, ActiveEventsList, GlobalSupplyBalanceCha
 import { SystemHealthComponent } from '@/components/system-health';
 import { MapViewer, MAP_LAYER_IDS, MAP_LAYER_LABELS, MapLayerId, SelectedMapFeature } from '@/components/map-viewer';
 import { RiskHeatmapMap } from '@/components/risk-heatmap-map';
-import { SnapshotFallbackBadge } from '@/components/snapshot-badge';
 import { ApiClient } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { HACKATHON_TOP_RISKS, HACKATHON_MAP_ASSETS, HACKATHON_SUPPLY_ROUTES, HACKATHON_CHOKEPOINTS, SupplyRoute, MapAsset } from '@/data/snapshot';
@@ -296,8 +295,6 @@ export default function WarRoom() {
 
   return (
     <div className="h-full min-h-[850px] min-w-[1280px] w-full bg-[#0f181b] p-3 flex gap-3 text-slate-300 font-sans">
-      <SnapshotFallbackBadge />
-
       {/* LEFT COLUMN */}
       <div className="w-[320px] flex flex-col gap-3 flex-shrink-0 overflow-y-auto no-scrollbar">
         
