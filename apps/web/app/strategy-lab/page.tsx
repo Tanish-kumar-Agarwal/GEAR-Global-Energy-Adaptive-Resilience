@@ -39,7 +39,7 @@ interface StrategyResult {
     resilience?: {
       supply_resilience?: { score?: unknown; reason?: string };
       route_resilience?: { score?: unknown; reason?: string };
-      dependency_concentration?: { before?: number; after?: number };
+      dependency_concentration?: { before?: unknown; after?: unknown };
     };
     economic_impact?: { status?: string; avoided_loss?: unknown; reason?: string };
     provenance?: { source: string; action: string; timestamp: string }[];
@@ -58,14 +58,54 @@ interface OptimizationOutcome {
   };
 }
 
-function UnavailablePanel({ reason }: { reason?: string }) {
+// ---------------------------------------------------------------------------
+// Three distinct empty states, deliberately styled apart (red is reserved for
+// actual failures only):
+//   AwaitingAction     neutral grey, instructional: the user has not run the
+//                      step that computes this yet. A call to action.
+//   BackendUnavailable amber: the live API genuinely reports the data as
+//                      unavailable; the backend's own reason is preserved.
+//   NotModeled         dim slate: a deliberate gap in this build, not a
+//                      transient failure.
+// ---------------------------------------------------------------------------
+
+function AwaitingAction({ prompt, onRun, running }: { prompt: string; onRun?: () => void; running?: boolean }) {
   return (
-    <div className="flex items-center justify-center bg-slate-900/50 border border-dashed border-slate-700 h-full w-full rounded p-4 text-center">
-      <div className="flex flex-col items-center">
-        <span className="text-red-400/80 font-bold text-[10px] uppercase tracking-widest mb-1">DATA UNAVAILABLE</span>
-        <span className="text-slate-500 text-[9px] max-w-[220px]">{reason ?? 'The live API does not provide this data.'}</span>
+    <div className="flex items-center justify-center bg-slate-900/40 border border-slate-800 h-full w-full rounded p-4 text-center">
+      <div className="flex flex-col items-center gap-1.5">
+        <span className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">Awaiting Step 2</span>
+        <span className="text-slate-500 text-[9px] max-w-[230px]">{prompt}</span>
+        {onRun && (
+          <button
+            onClick={onRun}
+            disabled={running}
+            className="mt-1 px-2.5 py-1 text-[9px] font-bold rounded border border-blue-700/60 bg-blue-900/30 text-blue-300 hover:bg-blue-900/60 disabled:opacity-50 transition-colors"
+          >
+            {running ? 'Running...' : 'Run procurement optimization'}
+          </button>
+        )}
       </div>
     </div>
+  );
+}
+
+function BackendUnavailable({ reason }: { reason?: string }) {
+  return (
+    <div className="flex items-center justify-center bg-amber-950/15 border border-dashed border-amber-800/50 h-full w-full rounded p-4 text-center">
+      <div className="flex flex-col items-center">
+        <span className="text-amber-400/90 font-bold text-[10px] uppercase tracking-widest mb-1">DATA UNAVAILABLE</span>
+        <span className="text-slate-500 text-[9px] max-w-[230px]">{reason ?? 'The live API reports this data as unavailable.'}</span>
+      </div>
+    </div>
+  );
+}
+
+function NotModeled({ reason }: { reason?: string }) {
+  return (
+    <span className="text-slate-500">
+      <span className="font-bold text-[10px] uppercase tracking-wider">Not modeled</span>
+      {reason && <span className="block text-[9px] text-slate-600">{reason}</span>}
+    </span>
   );
 }
 
@@ -245,7 +285,7 @@ export default function StrategyLab() {
             className="w-full mt-2 flex items-center justify-center gap-2 py-3 bg-emerald-700 hover:bg-emerald-600 disabled:bg-slate-700 text-white text-xs font-bold rounded transition-colors"
           >
             {strategyRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {strategyRunning ? 'Evaluating Strategy...' : 'Evaluate Strategy Overlay'}
+            {strategyRunning ? 'Evaluating Strategy...' : '1 · Evaluate Strategy Overlay'}
           </button>
           {strategyError && <div className="text-[10px] text-red-400">{strategyError}</div>}
 
@@ -264,7 +304,7 @@ export default function StrategyLab() {
               {(optPhase === 'baseline' || optPhase === 'optimizing') ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {optPhase === 'baseline' ? 'Simulating Baseline...'
                 : optPhase === 'optimizing' ? 'Optimizing Procurement...'
-                : 'Run Procurement Optimization'}
+                : '2 · Run Procurement Optimization'}
             </button>
             {optPhase === 'failed' && <div className="text-[10px] text-red-400 mt-1.5">Optimization failed or timed out on the backend</div>}
           </div>
@@ -288,21 +328,21 @@ export default function StrategyLab() {
                 />
                 <TopKpi
                   label="Avoided Physical Shortage"
-                  value={objective?.improvement != null ? `${objective.improvement.toFixed(2)} Mb/d` : 'UNAVAILABLE'}
+                  value={objective?.improvement != null ? `${objective.improvement.toFixed(2)} Mb/d` : 'Awaiting step 2'}
                   color={objective?.improvement != null ? 'text-emerald-400' : 'text-slate-500'}
-                  sub={objective ? 'From procurement optimization' : 'Run the procurement optimization'}
+                  sub={objective ? 'From procurement optimization' : 'Computed by the procurement optimization'}
                 />
                 <TopKpi
                   label="Avoided Economic Loss"
-                  value={isAvail(econ?.avoided_loss) ? String(econ?.avoided_loss) : 'UNAVAILABLE'}
-                  color={isAvail(econ?.avoided_loss) ? 'text-emerald-400' : 'text-slate-500'}
+                  value={isAvail(econ?.avoided_loss) ? String(econ?.avoided_loss) : 'DATA UNAVAILABLE'}
+                  color={isAvail(econ?.avoided_loss) ? 'text-emerald-400' : 'text-amber-400/90'}
                   sub={econ?.reason ?? ''}
                 />
                 <TopKpi
                   label="Dependency Concentration"
-                  value={dep?.before != null && dep?.after != null ? `${dep.before} → ${dep.after}` : 'UNAVAILABLE'}
-                  color={dep?.before != null ? 'text-emerald-400' : 'text-slate-500'}
-                  sub={dep?.before != null ? 'Calculated delta' : ''}
+                  value={isAvail(dep?.before) && isAvail(dep?.after) ? `${dep?.before} → ${dep?.after}` : 'DATA UNAVAILABLE'}
+                  color={isAvail(dep?.before) ? 'text-emerald-400' : 'text-amber-400/90'}
+                  sub={isAvail(dep?.before) ? 'Calculated delta' : 'Not provided by the strategy engine'}
                 />
               </div>
             ) : (
@@ -344,7 +384,11 @@ export default function StrategyLab() {
                 ))}
               </div>
             ) : (
-              <UnavailablePanel reason="Run the procurement optimization to compute route reallocations." />
+              <AwaitingAction
+                prompt="Route reallocations are computed by the procurement optimization."
+                onRun={runOptimization}
+                running={optPhase === 'baseline' || optPhase === 'optimizing'}
+              />
             )}
           </div>
         </div>
@@ -375,7 +419,7 @@ export default function StrategyLab() {
                     ))}
                   </ul>
                 ) : (
-                  <div className="text-[10px] text-slate-500 italic">Not computed; run the procurement optimization.</div>
+                  <div className="text-[10px] text-slate-500 italic">Awaiting step 2, computed by the procurement optimization.</div>
                 )}
               </div>
             </div>
@@ -393,7 +437,11 @@ export default function StrategyLab() {
                 <div className="flex justify-between border-t border-slate-700/50 pt-1.5"><span className="text-slate-400">Improvement</span><span className="font-mono text-emerald-400 font-bold">{objective.improvement?.toFixed(2)} Mb/d</span></div>
               </div>
             ) : (
-              <UnavailablePanel reason="Run the procurement optimization for a baseline vs optimized comparison." />
+              <AwaitingAction
+                prompt="The baseline vs optimized comparison comes from the procurement optimization."
+                onRun={runOptimization}
+                running={optPhase === 'baseline' || optPhase === 'optimizing'}
+              />
             )}
           </div>
           <div className="w-[30%] bg-[#182227] rounded-md border border-slate-700/50 p-3 relative flex flex-col">
@@ -440,7 +488,11 @@ export default function StrategyLab() {
               <div className="text-[9px] text-slate-500 mt-2">0.00 means the optimizer fully covered demand for that country.</div>
             </div>
           ) : (
-            <UnavailablePanel reason="Run the procurement optimization to compute per-country shortages." />
+            <AwaitingAction
+              prompt="Per-country shortages are computed by the procurement optimization."
+              onRun={runOptimization}
+              running={optPhase === 'baseline' || optPhase === 'optimizing'}
+            />
           )}
         </div>
 
@@ -449,19 +501,16 @@ export default function StrategyLab() {
           {strategy ? (
             <div className="flex flex-col gap-2 text-[10px] text-slate-400">
               <div>
-                Supplier Resilience:
-                <span className={`font-bold ml-1 ${isAvail(strategy.result?.resilience?.supply_resilience?.score) ? 'text-white' : 'text-slate-500'}`}>
-                  {isAvail(strategy.result?.resilience?.supply_resilience?.score) ? String(strategy.result?.resilience?.supply_resilience?.score) : 'UNAVAILABLE'}
-                </span>
-                {strategy.result?.resilience?.supply_resilience?.reason && (
-                  <div className="text-[9px] text-slate-600">{strategy.result.resilience.supply_resilience.reason}</div>
-                )}
+                Supplier Resilience:{' '}
+                {isAvail(strategy.result?.resilience?.supply_resilience?.score)
+                  ? <span className="font-bold text-white">{String(strategy.result?.resilience?.supply_resilience?.score)}</span>
+                  : <NotModeled reason={strategy.result?.resilience?.supply_resilience?.reason ?? 'Deliberate gap: requires full graph re-simulation'} />}
               </div>
               <div>
-                Route Resilience:
-                <span className={`font-bold ml-1 ${isAvail(strategy.result?.resilience?.route_resilience?.score) ? 'text-white' : 'text-slate-500'}`}>
-                  {isAvail(strategy.result?.resilience?.route_resilience?.score) ? String(strategy.result?.resilience?.route_resilience?.score) : 'UNAVAILABLE'}
-                </span>
+                Route Resilience:{' '}
+                {isAvail(strategy.result?.resilience?.route_resilience?.score)
+                  ? <span className="font-bold text-white">{String(strategy.result?.resilience?.route_resilience?.score)}</span>
+                  : <NotModeled reason={strategy.result?.resilience?.route_resilience?.reason ?? 'Deliberate gap in this build'} />}
               </div>
             </div>
           ) : (
@@ -471,7 +520,7 @@ export default function StrategyLab() {
 
         <div className="flex-1 bg-[#182227] rounded-md border border-slate-700/50 p-4 shadow-sm relative min-h-[140px]">
           <h3 className="text-[10px] font-bold tracking-wider text-slate-400 uppercase mb-3">CAPEX Funding Plan</h3>
-          <UnavailablePanel reason={econ?.reason ?? 'The API reports financial inputs (CapEx, route costs) as unavailable.'} />
+          <BackendUnavailable reason={econ?.reason ?? 'The API reports financial inputs (CapEx, route costs) as unavailable.'} />
         </div>
 
       </div>
