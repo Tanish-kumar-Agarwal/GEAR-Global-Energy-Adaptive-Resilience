@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { Activity, Loader2, Download, Share2, Search, AlertTriangle, Anchor, Globe, Clock, Zap, MapPin, BarChart2, Gauge, ArrowDownCircle, DollarSign, Flame, Building, Ship, Factory, Copy } from 'lucide-react';
 import { MapViewer, SelectedMapFeature, MapAssetInput } from '@/components/map-viewer';
 import { SnapshotFallbackBadge } from '@/components/snapshot-badge';
@@ -10,7 +10,8 @@ import { useJobPolling } from '@/lib/useJobPolling';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { HACKATHON_MAP_ASSETS, HACKATHON_CHOKEPOINTS, HACKATHON_SUPPLY_ROUTES, SupplyRoute } from '@/data/snapshot';
 import {
-  toMapAssets, toChokepoints, toSupplyRoutes, adaptScenarioResults, applyScenarioOverlay, ChokepointRow,
+  toMapAssets, toChokepoints, toSupplyRoutes, adaptScenarioResults, applyScenarioOverlay,
+  buildPreviewStub, ChokepointRow, ScenarioPreview,
 } from '@/lib/live-adapters';
 
 // Event presets: choosing an event retargets the scenario.
@@ -138,6 +139,45 @@ function ScenarioLabContent() {
   // the adapted results of the run being displayed.
   const [lastRun, setLastRun] = useState({ targetId: initialTarget, severity: initialSeverity, duration: initialDuration });
 
+  // ---- Live severity preview: drag the slider, the map reacts. ----
+  // Debounced; in-flight requests are aborted and a sequence counter makes
+  // sure an older response can never overwrite a newer one.
+  const [preview, setPreview] = useState<{
+    params: { targetId: string; severity: number; duration: number };
+    data: ScenarioPreview;
+  } | null>(null);
+  const previewSeq = useRef(0);
+  const previewAbort = useRef<AbortController | null>(null);
+  const previewArmed = useRef(false);
+
+  useEffect(() => {
+    // No preview on initial mount; only once the user changes something.
+    if (!previewArmed.current) {
+      previewArmed.current = true;
+      return;
+    }
+    const seq = ++previewSeq.current;
+    const params = { targetId, severity, duration };
+    const timer = setTimeout(async () => {
+      previewAbort.current?.abort();
+      const ctrl = new AbortController();
+      previewAbort.current = ctrl;
+      const res = await ApiClient.previewScenario(
+        { target_id: params.targetId, severity: params.severity, duration_days: params.duration },
+        ctrl.signal,
+      );
+      if (previewSeq.current !== seq) return; // stale, a newer request fired
+      if (res?.data) {
+        setPreview({ params, data: res.data });
+      } else if (res?.notImplemented) {
+        // Endpoint not deployed yet: clearly-labeled client-side stand-in.
+        setPreview({ params, data: buildPreviewStub(params.targetId, params.severity, chokepointsRef.current, routeChokepointRef.current) });
+      }
+      // Transient failure: keep the last good preview, show nothing misleading.
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [targetId, severity, duration]);
+
   const { status, results: rawResults, error } = useJobPolling(jobId, scenarioId);
 
   // Live jobs return the raw simulation shape; the adapter fills in the
@@ -147,20 +187,38 @@ function ScenarioLabContent() {
     [rawResults, lastRun],
   );
 
-  // Completed runs recolor the map: scenario risk stacks on the live baseline.
+  // The preview shows unless the real run on the SAME params has landed; the
+  // completed run is always the source of truth for its own parameters.
+  const previewShown = !!preview && (
+    !results ||
+    preview.params.targetId !== lastRun.targetId ||
+    preview.params.severity !== lastRun.severity ||
+    preview.params.duration !== lastRun.duration
+  );
+
+  // Completed runs (or a labeled preview estimate) recolor the map: scenario
+  // risk stacks on the live baseline.
+  const activeOverlay = previewShown ? preview.data : results;
+  const saturatedIds = previewShown ? preview.data.saturated : undefined;
   const { routes: displayRoutes, chokepoints: displayChokepoints } = useMemo(
-    () => applyScenarioOverlay(routes, chokepoints, results),
-    [routes, chokepoints, results],
+    () => applyScenarioOverlay(routes, chokepoints, activeOverlay, saturatedIds),
+    [routes, chokepoints, activeOverlay, saturatedIds],
   );
 
   // A target already at or near maximum baseline risk cannot visibly react to
-  // the severity slider; say so instead of looking broken.
+  // the severity slider; say so instead of looking broken. The preview
+  // endpoint reports the same condition via its saturated array.
   const targetBaseline = chokepoints.find(c => c.id === targetId)?.risk ?? null;
-  const targetSaturated = targetBaseline != null && targetBaseline >= 90;
+  const targetSaturated = (targetBaseline != null && targetBaseline >= 90)
+    || (previewShown && (preview.data.saturated ?? []).includes(targetId));
 
   // Derived instead of synced: spinning while the scenario is being created or
   // while a job exists that has not finished yet.
   const running = submitting || (jobId !== null && status !== 'COMPLETED' && status !== 'FAILED' && !error);
+
+  // Refs mirrored for async preview callbacks (never written during render).
+  const chokepointsRef = useRef<ChokepointRow[]>(HACKATHON_CHOKEPOINTS);
+  const routeChokepointRef = useRef<Record<string, string | null | undefined>>({});
 
   useEffect(() => {
     // ApiClient serves live data and falls back to snapshot payloads, so this
@@ -168,8 +226,11 @@ function ScenarioLabContent() {
     Promise.all([ApiClient.getWatchlistAssets(), ApiClient.getWorldChokepoints(), ApiClient.getWorldRoutes()])
       .then(([liveAssets, liveChokepoints, liveRoutes]) => {
         setAssets(toMapAssets(liveAssets));
-        setChokepoints(toChokepoints(liveChokepoints));
+        const cps = toChokepoints(liveChokepoints);
+        setChokepoints(cps);
+        chokepointsRef.current = cps;
         setRoutes(toSupplyRoutes(liveRoutes));
+        routeChokepointRef.current = Object.fromEntries(liveRoutes.map(r => [r.id, r.chokepoint_id]));
         setLiveTargets([
           ...liveChokepoints.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name, kind: 'Chokepoint' })),
           ...liveAssets.map((a: { id: string; name: string; type: string }) => ({ id: a.id, name: a.name, kind: a.type })),
@@ -523,7 +584,7 @@ function ScenarioLabContent() {
               {targetSaturated && (
                 <p className="mt-1.5 flex items-start gap-1.5 text-[10px] font-bold leading-snug text-amber-400">
                   <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-                  Baseline risk is already {targetBaseline}/100. Severity changes will barely move this target on the map. Pick a lower-risk target such as the Strait of Malacca to see the map react.
+                  Baseline risk is already {targetBaseline != null ? `${targetBaseline}/100` : 'at maximum'}. Severity changes will barely move this target on the map. Pick a lower-risk target such as the Strait of Malacca to see the map react.
                 </p>
               )}
             </div>
@@ -629,6 +690,7 @@ function ScenarioLabContent() {
                      assets={assets}
                      routes={displayRoutes}
                      chokepoints={displayChokepoints}
+                     overlayPreview={previewShown}
                      onFeatureSelect={(f: SelectedMapFeature) => {
                        setTargetId(f.id);
                        setScenarioName(`Disruption: ${f.name}`);
@@ -637,6 +699,12 @@ function ScenarioLabContent() {
                    />
                  ) : <div className="animate-pulse text-sm">Loading Graph...</div>}
              </div>
+
+             {previewShown && (
+               <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 rounded border border-dashed border-amber-500/80 bg-amber-950/90 px-3 py-1 text-[10px] font-black tracking-wider text-amber-300 backdrop-blur">
+                 PREVIEW ESTIMATE, not a full simulation
+               </div>
+             )}
 
              {/* Map Legend mimicking reference */}
              <div className="absolute bottom-4 left-4 bg-slate-900/90 border border-slate-700 rounded p-3 text-[10px] text-slate-300 flex flex-col gap-2 z-10 backdrop-blur">
