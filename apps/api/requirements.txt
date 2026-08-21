@@ -12,3 +12,4 @@ networkx
 scikit-learn
 xgboost
 ortools
+certifi

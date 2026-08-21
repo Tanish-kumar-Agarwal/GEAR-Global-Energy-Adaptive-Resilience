@@ -5,6 +5,7 @@ from typing import Optional
 
 from core.database import get_db
 from models.domain import Scenario, Job
+from services.market_data_service import get_live_prices
 
 router = APIRouter(prefix="/api/v1/market", tags=["Market"])
 
@@ -32,7 +33,10 @@ def get_reserve_coverage(user: User = Depends(RequirePermissions("world:read")))
 
 @router.get("/prices")
 def get_prices(user: User = Depends(RequirePermissions("world:read"))):
-    return {"status": "data_unavailable", "message": "Real-time financial market integration is out of scope."}
+    prices = get_live_prices()
+    if prices is None:
+        return {"status": "data_unavailable", "message": "EIA market feed unavailable (set EIA_API_KEY to enable live prices)."}
+    return prices
 
 @router.get("/balance-timeseries")
 def get_balance_timeseries(user: User = Depends(RequirePermissions("world:read"))):
