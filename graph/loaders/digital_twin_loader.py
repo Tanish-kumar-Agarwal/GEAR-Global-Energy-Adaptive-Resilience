@@ -75,16 +75,20 @@ def load_full_graph_projection():
                 id=chk.id, name=chk.name, region=chk.region
             )
 
-        # PASSES_THROUGH comes from the authoritative Route.chokepoint_id foreign key,
-        # so a new route or chokepoint cascades without touching this loader.
+        # PASSES_THROUGH comes from the full Route.chokepoint_ids linkage (with the
+        # single chokepoint_id FK as fallback), so a route through several straits
+        # projects an edge to each. Projecting only the primary FK left secondary
+        # chokepoints like Malacca with zero dependents, which made every cascade
+        # targeting them come back empty.
         for r in routes:
-            if r.chokepoint_id:
+            linked = r.chokepoint_ids or ([r.chokepoint_id] if r.chokepoint_id else [])
+            for chokepoint_id in linked:
                 neo4j_client.execute_write(
                     """
                     MATCH (r:Route {id: $r_id}), (c:Chokepoint {id: $c_id})
                     MERGE (r)-[:PASSES_THROUGH]->(c)
                     """,
-                    r_id=r.id, c_id=r.chokepoint_id
+                    r_id=r.id, c_id=chokepoint_id
                 )
 
         # 6. Trade Flows (The core dependency edges and nodes)
