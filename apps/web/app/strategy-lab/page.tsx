@@ -144,9 +144,15 @@ export default function StrategyLab() {
 
   // Editable assumptions behind every financial metric. Defaults are stated,
   // visible, and each change recomputes the tagged figures live.
+  // shortagePremium is deliberately a PREMIUM over baseline price, not the
+  // barrel value: the barrel still gets bought either way, what the strategy
+  // avoids is the disruption spread (war-risk insurance, emergency spot
+  // premiums, freight surges, demand destruction), historically roughly
+  // 8-20 $/bbl during major chokepoint events. Valuing at the full commodity
+  // price inflates ROI by an order of magnitude.
   const [assump, setAssump] = useState({
     discountPct: 8,        // discount rate, %/yr
-    energyValue: 80,       // value of relieved supply, USD per barrel
+    shortagePremium: 12,   // avoided shortage premium, USD per barrel over baseline
     omPct: 5,              // operations and maintenance, % of budget per year
     rampYears: 2,          // years until the strategy reaches full effect
   });
@@ -272,8 +278,8 @@ export default function StrategyLab() {
   // Only computable once the optimizer has produced a REAL improvement.
   const fin = useMemo(() => {
     if (improvement == null) return null;
-    // 1 Mb/d = 1,000,000 bbl/day; benefit = improvement * value * 365 days.
-    const annualBenefitB = (improvement * assump.energyValue * 365) / 1000; // $B/yr
+    // 1 Mb/d = 1,000,000 bbl/day; avoided cost = improvement * premium * 365.
+    const annualBenefitB = (improvement * assump.shortagePremium * 365) / 1000; // $B/yr
     const omCostB = budgetB * (assump.omPct / 100);
     const netCF = annualBenefitB - omCostB;
     const r = assump.discountPct / 100;
@@ -399,7 +405,7 @@ export default function StrategyLab() {
             </div>
             {([
               ['discountPct', 'Discount rate (%/yr)'],
-              ['energyValue', 'Value of relieved supply ($/bbl)'],
+              ['shortagePremium', 'Avoided shortage premium ($/bbl)'],
               ['omPct', 'O&M cost (% of budget /yr)'],
               ['rampYears', 'Years to full effect'],
             ] as [keyof typeof assump, string][]).map(([key, label]) => (
@@ -411,8 +417,13 @@ export default function StrategyLab() {
               </div>
             ))}
             <div className="text-[8px] text-slate-600 mt-1.5 leading-snug">
-              NPV = -budget + Σ (benefit - O&M) × ramp / (1+r)^t over the horizon.
-              Benefit = avoided shortage (live) × $/bbl × 365.
+              The premium is what disruption ADDS per barrel over the baseline price (war-risk insurance,
+              emergency spot spreads, freight surges), historically ~8-20 $/bbl in major chokepoint events;
+              the default sits mid-range. It is NOT the commodity price: the barrel is bought either way.
+            </div>
+            <div className="text-[8px] text-slate-600 mt-1 leading-snug">
+              NPV = -budget + Σ (avoided cost - O&M) × ramp / (1+r)^t over the horizon.
+              Avoided cost = avoided shortage (live) × premium × 365.
             </div>
           </div>
 
@@ -464,7 +475,8 @@ export default function StrategyLab() {
 
         {/* KPI STRIP */}
         <div className="bg-[#182227] rounded-md border border-slate-700/50 p-4 shadow-sm">
-          <h2 className="text-[11px] font-bold tracking-wider text-slate-300 uppercase mb-3">Strategic Investment Overview <span className="normal-case text-slate-500 font-normal">Financial figures derive from the live optimizer result and your stated assumptions</span></h2>
+          <h2 className="text-[11px] font-bold tracking-wider text-slate-300 uppercase mb-1">Strategic Investment Overview <span className="normal-case text-slate-500 font-normal">Financial figures derive from the live optimizer result and your stated assumptions</span></h2>
+          <div className="text-[9px] text-slate-500 mb-3">Financial figures are avoided-cost estimates (disruption costs the strategy prevents), not revenue or profit.</div>
           <div className="grid grid-cols-5 gap-3">
             <Kpi label="Total Investment" tag="user" value={`$${budgetB.toFixed(1)}B`} sub={`${horizon} Year Plan`} color="text-white" />
             <Kpi label="Avoided Shortage" tag="live"
