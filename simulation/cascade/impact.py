@@ -44,12 +44,16 @@ def compute_geo_impact(
     severity: float,
     duration_days: int,
     affected_route_ids: Optional[List[str]] = None,
+    include_base: bool = False,
 ) -> Dict[str, list]:
     """Returns {"impacted_routes": [...], "impacted_chokepoints": [...]}.
 
     affected_route_ids lets the caller pass routes the graph cascade already
     identified; routes linked to the target through chokepoint_ids are added
     from PostgreSQL so the overlay still works when the graph is unavailable.
+    include_base adds a "base_score" (pre-scenario baseline) to every entry so
+    callers such as the preview endpoint can flag saturated entities; the
+    default output shape is unchanged.
     """
     routes = db.query(Route).all()
     chokepoints = db.query(Chokepoint).all()
@@ -75,9 +79,10 @@ def compute_geo_impact(
         base = route_risk_score(route, chokepoints_by_id, latest)
         weight = TARGET_WEIGHT if route.id == target_id else ROUTE_WEIGHT
         score = _escalate(base, boost, weight)
-        impacted_routes.append(
-            {"route_id": route.id, "risk_score": score, "status": status_for_score(score)}
-        )
+        entry = {"route_id": route.id, "risk_score": score, "status": status_for_score(score)}
+        if include_base:
+            entry["base_score"] = base
+        impacted_routes.append(entry)
         impacted_cp_ids.update(route.chokepoint_ids or [])
 
     if target_id in chokepoints_by_id:
@@ -91,8 +96,9 @@ def compute_geo_impact(
         base = chokepoint_risk_score(cp, latest)
         weight = TARGET_WEIGHT if cp.id == target_id else NEIGHBOR_CHOKEPOINT_WEIGHT
         score = _escalate(base, boost, weight)
-        impacted_chokepoints.append(
-            {"chokepoint_id": cp.id, "risk_score": score, "status": status_for_score(score)}
-        )
+        entry = {"chokepoint_id": cp.id, "risk_score": score, "status": status_for_score(score)}
+        if include_base:
+            entry["base_score"] = base
+        impacted_chokepoints.append(entry)
 
     return {"impacted_routes": impacted_routes, "impacted_chokepoints": impacted_chokepoints}
