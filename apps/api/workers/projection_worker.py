@@ -72,6 +72,19 @@ def process_outbox_events(self):
                         "MERGE (n:Route {id: $id}) SET n.name = $name, n.capacity = $cap",
                         id=payload["id"], name=payload.get("name", ""), cap=payload.get("capacity", 0.0)
                     )
+                    # Project the route's chokepoint linkage so cascades on a
+                    # chokepoint can reach the flows that pass through it.
+                    # MERGE on id alone: the Chokepoint event may arrive later
+                    # and will fill in the name.
+                    for cp_id in (payload.get("chokepoint_ids") or []):
+                        neo4j_client.execute_write(
+                            """
+                            MATCH (r:Route {id: $r_id})
+                            MERGE (c:Chokepoint {id: $c_id})
+                            MERGE (r)-[:PASSES_THROUGH]->(c)
+                            """,
+                            r_id=payload["id"], c_id=cp_id
+                        )
                 
                 elif event.aggregate_type == "Chokepoint":
                     neo4j_client.execute_write(

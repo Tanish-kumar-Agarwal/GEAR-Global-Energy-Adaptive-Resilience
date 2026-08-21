@@ -38,7 +38,7 @@ def run():
             emit_outbox(db, "Supplier", s.id, {"id": s.id, "name": s.name, "country_id": s.country_id})
             
         for r in db.query(Route).all():
-            emit_outbox(db, "Route", r.id, {"id": r.id, "name": r.name, "capacity": r.capacity})
+            emit_outbox(db, "Route", r.id, {"id": r.id, "name": r.name, "capacity": r.capacity, "chokepoint_ids": r.chokepoint_ids or []})
             
         for c in db.query(Chokepoint).all():
             emit_outbox(db, "Chokepoint", c.id, {"id": c.id, "name": c.name})
