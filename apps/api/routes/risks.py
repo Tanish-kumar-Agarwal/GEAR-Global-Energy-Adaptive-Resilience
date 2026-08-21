@@ -49,12 +49,16 @@ def get_entity_risk(entity_id: str, db: Session = Depends(get_db), user: User = 
     return res
 
 @router.get("/categories")
-def get_risk_categories(user: User = Depends(RequirePermissions("risk:read"))):
-    return {"status": "data_unavailable", "message": "Risk categories breakdown unavailable."}
+def get_risk_categories(
+    window_days: int = Query(30, ge=1, le=365, description="Trailing window for event classification"),
+    db: Session = Depends(get_db),
+    user: User = Depends(RequirePermissions("risk:read")),
+):
+    return RiskService(db).get_categories(window_days=window_days)
 
 @router.get("/heatmap")
-def get_risk_heatmap(user: User = Depends(RequirePermissions("risk:read"))):
-    return {"status": "data_unavailable", "message": "Risk heatmap coordinates unavailable."}
+def get_risk_heatmap(db: Session = Depends(get_db), user: User = Depends(RequirePermissions("risk:read"))):
+    return RiskService(db).get_heatmap()
 
 @router.get("/{risk_id}")
 def get_risk_by_id(risk_id: str, db: Session = Depends(get_db), user: User = Depends(RequirePermissions("risk:read"))):

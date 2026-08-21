@@ -23,14 +23,22 @@ def calculate_blast_radius(entity_type: str, entity_id: str) -> Dict[str, Any]:
     """
     
     # Notice: APOC is standard in Neo4j. If it is not installed or available, we can fallback to standard CYPHER variable length paths.
+    # Dependency edges point at what they depend on: a Route PASSES_THROUGH a Chokepoint,
+    # a TradeFlow USES_ROUTE. So the things a disrupted node takes down with it are the
+    # ones pointing *at* it, reached by walking those edges in reverse. Walking them
+    # forwards from a chokepoint finds nothing, which is why this used to come back empty.
     fallback_query = """
-    MATCH p = (source {id: $entity_id})-[:PASSES_THROUGH|USES_ROUTE|DESTINED_FOR|LOCATED_IN*1..3]->(target)
-    WITH collect(DISTINCT target) AS nodes
-    RETURN 
-        [n IN nodes WHERE 'Country' IN labels(n) | n.id] AS affected_countries,
-        [n IN nodes WHERE 'EnergyAsset' IN labels(n) | n.id] AS affected_assets,
-        [n IN nodes WHERE 'Route' IN labels(n) | n.id] AS affected_routes,
-        [n IN nodes WHERE 'TradeFlow' IN labels(n) | n.id] AS affected_trade_flows
+    MATCH (source {id: $entity_id})
+    OPTIONAL MATCH (dependent)-[:PASSES_THROUGH|USES_ROUTE|EXPORTS_VIA*1..3]->(source)
+    WITH collect(DISTINCT dependent) AS dependents
+    OPTIONAL MATCH (tf:TradeFlow)-[:DESTINED_FOR]->(country:Country)
+        WHERE tf IN dependents
+    OPTIONAL MATCH (asset:EnergyAsset)-[:LOCATED_IN]->(country)
+    RETURN
+        [n IN collect(DISTINCT country) | n.id] AS affected_countries,
+        [n IN collect(DISTINCT asset) | n.id] AS affected_assets,
+        [n IN dependents WHERE 'Route' IN labels(n) | n.id] AS affected_routes,
+        [n IN dependents WHERE 'TradeFlow' IN labels(n) | n.id] AS affected_trade_flows
     """
     
     try:

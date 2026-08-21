@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from core.security import RequirePermissions, User
 from sqlalchemy.orm import Session
 from typing import Optional
 
 from core.database import get_db
 from models.domain import Scenario, Job
+from services.market_service import MarketService
 
 router = APIRouter(prefix="/api/v1/market", tags=["Market"])
 
@@ -27,13 +28,21 @@ def get_economic_impact(scenario_id: Optional[str] = None, db: Session = Depends
     return job.result["economic_impact"]
 
 @router.get("/reserve-coverage")
-def get_reserve_coverage(user: User = Depends(RequirePermissions("world:read"))):
-    return {"status": "data_unavailable", "message": "Real-time reserve coverage metrics are currently out of scope for the physical topology."}
+def get_reserve_coverage(
+    country_id: Optional[str] = Query(None, description="ISO-3 country code, e.g. IND"),
+    db: Session = Depends(get_db),
+    user: User = Depends(RequirePermissions("world:read")),
+):
+    return MarketService(db).get_reserve_coverage(country_id)
 
 @router.get("/prices")
-def get_prices(user: User = Depends(RequirePermissions("world:read"))):
-    return {"status": "data_unavailable", "message": "Real-time financial market integration is out of scope."}
+def get_prices(db: Session = Depends(get_db), user: User = Depends(RequirePermissions("world:read"))):
+    return MarketService(db).get_prices()
 
 @router.get("/balance-timeseries")
-def get_balance_timeseries(user: User = Depends(RequirePermissions("world:read"))):
-    return {"status": "data_unavailable", "message": "Live supply balance timeseries is out of scope."}
+def get_balance_timeseries(
+    days: int = Query(15, ge=2, le=120, description="Trailing window length in days"),
+    db: Session = Depends(get_db),
+    user: User = Depends(RequirePermissions("world:read")),
+):
+    return MarketService(db).get_balance_timeseries(days)

@@ -64,6 +64,9 @@ class Country(Base):
     id = Column(String, primary_key=True, index=True) # e.g. "IND"
     name = Column(String, unique=True, index=True)
     region = Column(String)
+    # Strategic reserve obligation in days of net imports (IEA members: 90).
+    # Null means the country has no published obligation to measure coverage against.
+    reserve_target_days = Column(Float, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class Commodity(Base):
@@ -84,6 +87,10 @@ class Route(Base):
     name = Column(String)
     capacity = Column(Float) # e.g., million barrels per day
     transit_time_days = Column(Integer)
+    # Chokepoint this route must transit. Drives route-level risk inheritance.
+    chokepoint_id = Column(String, ForeignKey("chokepoints.id"), nullable=True)
+    # Ordered [lng, lat] waypoints for map rendering. Null routes are simply not drawn.
+    path = Column(JSON, nullable=True)
 
 class Chokepoint(Base):
     __tablename__ = "chokepoints"
@@ -92,6 +99,9 @@ class Chokepoint(Base):
     risk_factor = Column(Float, default=0.0)
     latitude = Column(Float)
     longitude = Column(Float)
+    region = Column(String, nullable=True)
+    # Published daily transit volume in million barrels/day, used for exposure weighting.
+    daily_transit_volume = Column(Float, nullable=True)
 
 class EnergyAsset(Base):
     __tablename__ = "energy_assets"
@@ -133,6 +143,27 @@ class GeopoliticalEvent(Base):
     source_event_id = Column(String, unique=True, index=True) # Used for idempotency
     raw_payload = Column(JSON, nullable=True)
     ingestion_time = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class MarketPrice(Base):
+    """
+    Point-in-time commodity price observation. Every row carries its own source and
+    observation time so the UI can show provenance and staleness rather than implying
+    the number is live.
+    """
+    __tablename__ = "market_prices"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    symbol = Column(String, index=True) # BRENT, WTI, JKM_LNG, API2_COAL
+    name = Column(String)
+    commodity_id = Column(String, ForeignKey("commodities.id"), nullable=True)
+    price = Column(Float)
+    currency = Column(String, default="USD")
+    unit = Column(String) # USD/bbl, USD/MMBtu, USD/t
+    change_pct = Column(Float, nullable=True)
+    observed_at = Column(DateTime, index=True)
+    source_id = Column(String)
+    source_ref = Column(String, nullable=True)
+    source_observation_id = Column(String, unique=True, index=True) # idempotency
+    ingested_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 class RiskScore(Base):
     __tablename__ = "risk_scores"

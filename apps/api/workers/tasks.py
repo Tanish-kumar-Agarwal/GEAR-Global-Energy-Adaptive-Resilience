@@ -2,6 +2,7 @@ from .celery_app import celery_app
 from core.database import SessionLocal
 from models.domain import Job, JobStatus, TradeFlow, Route, EnergyAsset, DecisionAudit, Country, Scenario
 from simulation.monte_carlo.runner import run_monte_carlo
+from optimization.procurement import optimize_procurement
 import logging
 from datetime import datetime, timezone
 import uuid
@@ -28,8 +29,18 @@ def execute_scenario_simulation(self, job_id: str, target_id: str, severity: flo
         mc_results = run_monte_carlo(target_id, severity, duration_days, iterations=50, seed=42)
         
         from services.economic_impact_service import calculate_economic_impact
-        economic_impact = calculate_economic_impact(mc_results, duration_days=duration_days, commodity_price=None)
-        
+        from services.market_service import MarketService
+
+        # Value the gap against the latest ingested crude benchmark. If no observation has
+        # been ingested the valuation reports commodity_price as a missing input.
+        price_source = MarketService(db).get_benchmark_price("BRENT")
+        economic_impact = calculate_economic_impact(
+            mc_results,
+            duration_days=duration_days,
+            commodity_price=price_source["price"] if price_source else None,
+            price_source=price_source,
+        )
+
         from graph.algorithms.scenario_overlay import generate_scenario_overlay
         scenario_overlay = generate_scenario_overlay(job_id, target_id, severity)
         
@@ -138,9 +149,7 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
             for dest, dem in dest_demands.items()
         ]
 
-        # 3. Run optimizer. Imported here so optional native solver libraries do
-        # not prevent the API or other background tasks from starting.
-        from optimization.procurement import optimize_procurement
+        # 3. Run optimizer
         opt_result = optimize_procurement(final_routes, reserves, destinations, duration_days)
 
         if opt_result["status"] != "completed":
@@ -162,7 +171,15 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
         }
         
         from services.economic_impact_service import calculate_economic_impact
-        opt_economic = calculate_economic_impact(synth_mc, duration_days=duration_days, commodity_price=None)
+        from services.market_service import MarketService
+
+        opt_price_source = MarketService(db).get_benchmark_price("BRENT")
+        opt_economic = calculate_economic_impact(
+            synth_mc,
+            duration_days=duration_days,
+            commodity_price=opt_price_source["price"] if opt_price_source else None,
+            price_source=opt_price_source,
+        )
         
         # 5. Calculate Avoided Loss (if both are available)
         avoided_loss = "data_unavailable"

@@ -78,5 +78,7 @@ def get_scenario_results(id: str, db: Session = Depends(get_db), user: User = De
     return {
         "scenario_id": scenario.id,
         "job_status": job.status.value,
-        "results": job.result
+        "results": job.result,
+        # Surfaced so a failed job can explain itself in the UI instead of a generic message.
+        "error": job.error,
     }

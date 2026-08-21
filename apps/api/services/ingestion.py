@@ -52,6 +52,48 @@ class DeterministicDemoAdapter(BaseSourceAdapter):
                 "confidence": 0.95,
                 "raw_payload": {"policy_area": "energy", "tone": -4.5}
             },
+            {
+                "source": "SIM-GDELT",
+                "source_event_id": "EV-2025-05-24-004",
+                "event_type": "Shipping Disruption",
+                "title": "Vessels rerouted away from Bab el-Mandeb after attacks on shipping",
+                "description": "Carriers announce Cape of Good Hope routing, adding transit days.",
+                "event_time": datetime.now(timezone.utc).isoformat(),
+                "latitude": 12.58,
+                "longitude": 43.33,
+                "entity_reference": "CHK_BAB_EL_MANDEB",
+                "severity": 0.7,
+                "confidence": 0.88,
+                "raw_payload": {"carriers_announced": 6}
+            },
+            {
+                "source": "SIM-OPS",
+                "source_event_id": "EV-2025-05-24-005",
+                "event_type": "Refinery Outage",
+                "title": "Unplanned outage cuts crude runs at Jamnagar refinery",
+                "description": "Production unit shutdown following a process upset.",
+                "event_time": datetime.now(timezone.utc).isoformat(),
+                "latitude": 22.33,
+                "longitude": 69.88,
+                "entity_reference": "REF_JAMNAGAR",
+                "severity": 0.45,
+                "confidence": 0.8,
+                "raw_payload": {"units_affected": 1}
+            },
+            {
+                "source": "SIM-MARKET",
+                "source_event_id": "EV-2025-05-24-006",
+                "event_type": "Market Signal",
+                "title": "Crude inventories draw sharply as prices firm",
+                "description": "Commercial inventory draw reported against expectations.",
+                "event_time": datetime.now(timezone.utc).isoformat(),
+                "latitude": 29.76,
+                "longitude": -95.37,
+                "country_reference": "USA",
+                "severity": 0.3,
+                "confidence": 0.75,
+                "raw_payload": {"draw_mbbl": 4.2}
+            },
             # Malformed event to test error handling
             {
                 "source": "SIM-AIS",
@@ -98,6 +140,7 @@ class IngestionService:
                 "latitude": raw_event.get("latitude"),
                 "longitude": raw_event.get("longitude"),
                 "country_reference": raw_event.get("country_reference"),
+                "entity_reference": raw_event.get("entity_reference"),
                 "severity": float(raw_event["severity"]),
                 "confidence": float(raw_event["confidence"]),
                 "raw_payload": raw_event.get("raw_payload", {})
@@ -107,21 +150,38 @@ class IngestionService:
             return None
 
     def _resolve_entity(self, normalized_event: Dict[str, Any]) -> Optional[str]:
-        # 1. Try to resolve to a Chokepoint based on location/title
-        title = normalized_event["title"].lower()
-        if "hormuz" in title:
-            chokepoint = self.db.query(Chokepoint).filter(Chokepoint.id == "CHK_HORMUZ").first()
-            if chokepoint:
+        """
+        Resolution order: explicit entity reference, then chokepoint or asset named in the
+        text, then the country reference. Returns None rather than guessing.
+        """
+        # 1. Explicit reference from the source wins
+        entity_ref = normalized_event.get("entity_reference")
+        if entity_ref:
+            for model in (Chokepoint, EnergyAsset, Country):
+                if self.db.query(model).filter(model.id == entity_ref).first():
+                    return entity_ref
+
+        text = " ".join(
+            filter(None, [normalized_event.get("title"), normalized_event.get("description")])
+        ).lower()
+
+        # 2. Chokepoint named in the text
+        for chokepoint in self.db.query(Chokepoint).all():
+            if chokepoint.name and chokepoint.name.lower() in text:
                 return chokepoint.id
-        
-        # 2. Try to resolve Country
+
+        # 3. Energy asset named in the text
+        for asset in self.db.query(EnergyAsset).all():
+            if asset.name and asset.name.lower() in text:
+                return asset.id
+
+        # 4. Country reference from the source
         country_ref = normalized_event.get("country_reference")
         if country_ref:
             country = self.db.query(Country).filter(Country.id == country_ref).first()
             if country:
                 return country.id
-                
-        # 3. Could add EnergyAsset resolution by lat/lng bounding box, omitted for MVP simplicity
+
         return None
 
     def _calculate_risk(self, severity: float, confidence: float, entity_id: Optional[str]) -> tuple[float, RiskLevel]:

@@ -67,20 +67,25 @@ def load_full_graph_projection():
                 "MERGE (n:Route {id: $id}) SET n.name = $name, n.capacity = $cap",
                 id=r.id, name=r.name, cap=r.capacity
             )
-        
+
         chokepoints = db.query(Chokepoint).all()
         for chk in chokepoints:
             neo4j_client.execute_write(
-                "MERGE (n:Chokepoint {id: $id}) SET n.name = $name",
-                id=chk.id, name=chk.name
+                "MERGE (n:Chokepoint {id: $id}) SET n.name = $name, n.region = $region",
+                id=chk.id, name=chk.name, region=chk.region
             )
-            neo4j_client.execute_write(
-                """
-                MATCH (r:Route), (c:Chokepoint)
-                WHERE r.name CONTAINS 'Hormuz' AND c.id = 'CHK_HORMUZ'
-                MERGE (r)-[:PASSES_THROUGH]->(c)
-                """
-            )
+
+        # PASSES_THROUGH comes from the authoritative Route.chokepoint_id foreign key,
+        # so a new route or chokepoint cascades without touching this loader.
+        for r in routes:
+            if r.chokepoint_id:
+                neo4j_client.execute_write(
+                    """
+                    MATCH (r:Route {id: $r_id}), (c:Chokepoint {id: $c_id})
+                    MERGE (r)-[:PASSES_THROUGH]->(c)
+                    """,
+                    r_id=r.id, c_id=r.chokepoint_id
+                )
 
         # 6. Trade Flows (The core dependency edges and nodes)
         flows = db.query(TradeFlow).all()
