@@ -373,26 +373,88 @@ export function adaptScenarioResults(
 export interface ImpactedRoute { route_id: string; risk_score: number; status: string }
 export interface ImpactedChokepoint { chokepoint_id: string; risk_score: number; status: string }
 
+export type OverlayRoute = SupplyRoute & { pinned?: boolean };
+export type OverlayChokepoint = ChokepointRow & { pinned?: boolean };
+
 export function applyScenarioOverlay(
   baseRoutes: SupplyRoute[],
   baseChokepoints: ChokepointRow[],
   results: { impacted_routes?: ImpactedRoute[]; impacted_chokepoints?: ImpactedChokepoint[] } | null,
-): { routes: SupplyRoute[]; chokepoints: ChokepointRow[] } {
+  // Entities already saturated at baseline (from the preview's saturated
+  // array): marked pinned so the map can de-emphasize them and let the
+  // entities that actually MOVE with the slider carry the signal.
+  saturatedIds?: string[],
+): { routes: OverlayRoute[]; chokepoints: OverlayChokepoint[] } {
   const ir = results?.impacted_routes ?? [];
   const ic = results?.impacted_chokepoints ?? [];
   if (!ir.length && !ic.length) return { routes: baseRoutes, chokepoints: baseChokepoints };
 
+  const pinned = new Set(saturatedIds ?? []);
   const routeHits = new Map(ir.map(x => [x.route_id, x]));
   const cpHits = new Map(ic.map(x => [x.chokepoint_id, x]));
   return {
     routes: baseRoutes.map(r => {
       const hit = routeHits.get(r.id);
-      return hit ? { ...r, status: normalizeRouteStatus(hit.status) } : r;
+      return hit ? { ...r, status: normalizeRouteStatus(hit.status), pinned: pinned.has(r.id) } : r;
     }),
     chokepoints: baseChokepoints.map(c => {
       const hit = cpHits.get(c.id);
-      return hit ? { ...c, risk: Math.round(hit.risk_score) } : c;
+      return hit ? { ...c, risk: Math.round(hit.risk_score), pinned: pinned.has(c.id) } : c;
     }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Severity preview: POST /scenarios/preview returns a fast estimate overlay.
+// Same impacted_* vocabulary as completed runs, so applyScenarioOverlay works
+// unchanged. is_estimate/mode exist so the UI can (and must) label it.
+// ---------------------------------------------------------------------------
+
+export interface ScenarioPreview {
+  status: string;
+  mode: 'preview';
+  is_estimate: boolean;
+  method?: string;
+  computed_ms?: number;
+  impacted_routes: ImpactedRoute[];
+  impacted_chokepoints: ImpactedChokepoint[];
+  saturated?: string[];
+}
+
+function statusForRisk(risk: number): string {
+  return risk >= 70 ? 'disrupted' : risk >= 40 ? 'at_risk' : 'stable';
+}
+
+// Local stand-in for the backend preview endpoint, used ONLY while the
+// endpoint is not deployed (404/501), never on transient errors. Mirrors the
+// backend's stacking behavior: severity pushes the target from its live
+// baseline toward 100, and routes through the target follow.
+export function buildPreviewStub(
+  targetId: string,
+  severity: number,
+  chokepoints: ChokepointRow[],
+  routeChokepoint: Record<string, string | null | undefined>,
+): ScenarioPreview {
+  const target = chokepoints.find(c => c.id === targetId);
+  const baseline = target?.risk ?? 30;
+  const saturated = baseline >= 90 ? [targetId] : [];
+  const risk = Math.min(100, Math.round(baseline + (100 - baseline) * severity));
+
+  const impacted_chokepoints: ImpactedChokepoint[] = target
+    ? [{ chokepoint_id: targetId, risk_score: risk, status: statusForRisk(risk) }]
+    : [];
+  const impacted_routes: ImpactedRoute[] = Object.entries(routeChokepoint)
+    .filter(([, cp]) => cp === targetId)
+    .map(([routeId]) => ({ route_id: routeId, risk_score: risk, status: statusForRisk(risk) }));
+
+  return {
+    status: 'ok',
+    mode: 'preview',
+    is_estimate: true,
+    method: 'client_stub',
+    impacted_routes,
+    impacted_chokepoints,
+    saturated,
   };
 }
 
