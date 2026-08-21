@@ -12,3 +12,12 @@ networkx
 scikit-learn
 xgboost
 ortools
+# Auth stack: imported by core/security.py and routes/auth.py at startup.
+pyjwt
+passlib
+# passlib 1.7.4 crashes against bcrypt >= 4.1 ("password cannot be longer than
+# 72 bytes" during backend detection), which breaks /auth/token.
+bcrypt<4.1
+# FastAPI needs this to parse the OAuth2 login form.
+python-multipart
+python-dotenv

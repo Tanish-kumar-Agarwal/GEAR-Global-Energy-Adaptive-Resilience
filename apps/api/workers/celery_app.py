@@ -25,4 +25,8 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    # Both publishing and worker consumption follow this queue. Overriding it
+    # (CELERY_TASK_QUEUE=gear_geo) lets a second API+worker pair run against the
+    # same Redis without the default-queue workers stealing its jobs.
+    task_default_queue=os.getenv("CELERY_TASK_QUEUE", "celery"),
 )
