@@ -106,9 +106,16 @@ def _queue_has_worker(timeout: float = 1.5) -> bool:
     except Exception:
         return False
 
+def _parse_scenario_uuid(id: str) -> uuid.UUID:
+    """422 with a clear message instead of an unhandled ValueError 500."""
+    try:
+        return uuid.UUID(id)
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(status_code=422, detail=f"'{id}' is not a valid scenario id (expected a UUID)")
+
 @router.post("/{id}/run", status_code=202)
 def run_scenario(id: str, sync_fallback: bool = False, db: Session = Depends(get_db), user: User = Depends(RequirePermissions("scenario:execute"))):
-    scenario_id = uuid.UUID(id)
+    scenario_id = _parse_scenario_uuid(id)
     scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
     if not scenario:
         raise HTTPException(status_code=404, detail="Scenario not found")
@@ -187,7 +194,7 @@ def run_scenario(id: str, sync_fallback: bool = False, db: Session = Depends(get
 
 @router.get("/{id}/results")
 def get_scenario_results(id: str, db: Session = Depends(get_db), user: User = Depends(RequirePermissions("scenario:read"))):
-    scenario_id = uuid.UUID(id)
+    scenario_id = _parse_scenario_uuid(id)
     scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
     if not scenario or not scenario.job_id:
         raise HTTPException(status_code=404)

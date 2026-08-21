@@ -114,6 +114,8 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
         cascade = scenario_job.result.get("cascade", {})
         target_id = cascade.get("initial_disruption", {}).get("target")
         duration_days = cascade.get("initial_disruption", {}).get("duration_days", 30)
+        severity = cascade.get("initial_disruption", {}).get("severity", 0.0) or 0.0
+        affected_route_ids = set(cascade.get("affected_routes", []))
         baseline_impact = scenario_job.result.get("impact", {})
         baseline_economic = scenario_job.result.get("economic_impact", {})
         
@@ -142,9 +144,17 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
         final_routes = []
         for r in db_routes:
             if r.id in route_map:
+                # Routes the cascade marked as disrupted lose capacity in
+                # proportion to scenario severity. Without this the optimizer
+                # re-solves the UNDISRUPTED network (total capacity far exceeds
+                # demand) and always reports a shortage of exactly 0, which is
+                # a degenerate result, not a recovery plan.
+                capacity = (r.capacity or 0.0)
+                if r.id in affected_route_ids:
+                    capacity = capacity * (1.0 - severity)
                 final_routes.append({
                     "id": r.id,
-                    "capacity": r.capacity,
+                    "capacity": capacity,
                     "destination_id": route_map[r.id]["dest"],
                     "supplier_id": route_map[r.id]["sup"]
                 })
@@ -221,7 +231,10 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
             "resilience": opt_result["resilience"],
             "avoided_loss": avoided_loss,
             "constraints": ["Route capacities", "Reserve capacities", "Demand satisfaction"],
-            "assumptions": ["Storage draws are linear over duration", "Full route capacity is accessible"],
+            "assumptions": [
+                "Storage draws are linear over duration",
+                "Routes the cascade marked as disrupted keep capacity * (1 - severity); all other routes are fully accessible",
+            ],
             "provenance": ["PostgreSQL EnergyAsset", "PostgreSQL Route", "Phase 4.3 Cascade"],
             "methodology": "OR-Tools GLOP optimization minimizing physical unmet demand."
         }
