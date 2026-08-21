@@ -10,11 +10,12 @@ import { useJobPolling } from '@/lib/useJobPolling';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { HACKATHON_MAP_ASSETS, HACKATHON_CHOKEPOINTS, HACKATHON_SUPPLY_ROUTES, SupplyRoute } from '@/data/snapshot';
 import {
-  toMapAssets, toChokepoints, toSupplyRoutes, adaptScenarioResults, ChokepointRow,
+  toMapAssets, toChokepoints, toSupplyRoutes, adaptScenarioResults, applyScenarioOverlay, ChokepointRow,
 } from '@/lib/live-adapters';
 
 // Event presets: choosing an event retargets the scenario.
 const EVENT_TARGETS: Record<string, { targetId: string; region: string }> = {
+  'Strait of Malacca blockade': { targetId: 'CHK_MALACCA', region: 'Strait of Malacca' },
   'Strait of Hormuz': { targetId: 'CHK_HORMUZ', region: 'Strait of Hormuz' },
   'China export controls': { targetId: 'AST_SHANGHAI', region: 'East Asia' },
   'Red Sea shipping disruption': { targetId: 'CHK_BAB_EL_MANDEB', region: 'Red Sea' },
@@ -53,7 +54,9 @@ function ScenarioLabContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const initialTarget = searchParams.get('target_id') || 'CHK_HORMUZ';
+  // Default to a target with baseline headroom: Hormuz already sits near 100,
+  // so severity changes barely move the map there (see saturation note below).
+  const initialTarget = searchParams.get('target_id') || 'CHK_MALACCA';
   const initialSeverity = Math.min(1, Math.max(0, parseFloat(searchParams.get('severity') || '0.7') || 0.7));
   const initialDuration = Math.min(120, Math.max(1, parseInt(searchParams.get('duration') || '30', 10) || 30));
 
@@ -66,7 +69,7 @@ function ScenarioLabContent() {
   const [routes, setRoutes] = useState<SupplyRoute[]>(HACKATHON_SUPPLY_ROUTES);
   const [chokepoints, setChokepoints] = useState<ChokepointRow[]>(HACKATHON_CHOKEPOINTS);
   const [liveTargets, setLiveTargets] = useState<{ id: string; name: string; kind: string }[] | null>(null);
-  const [eventType, setEventType] = useState('Strait of Hormuz');
+  const [eventType, setEventType] = useState('Strait of Malacca blockade');
 
   const [commodities, setCommodities] = useState<string[]>(['Crude Oil', 'LNG']);
   const [regions, setRegions] = useState<string[]>(['India', 'Global', 'Strait of Hormuz']);
@@ -143,6 +146,17 @@ function ScenarioLabContent() {
     () => (rawResults ? adaptScenarioResults(rawResults, lastRun) : rawResults),
     [rawResults, lastRun],
   );
+
+  // Completed runs recolor the map: scenario risk stacks on the live baseline.
+  const { routes: displayRoutes, chokepoints: displayChokepoints } = useMemo(
+    () => applyScenarioOverlay(routes, chokepoints, results),
+    [routes, chokepoints, results],
+  );
+
+  // A target already at or near maximum baseline risk cannot visibly react to
+  // the severity slider; say so instead of looking broken.
+  const targetBaseline = chokepoints.find(c => c.id === targetId)?.risk ?? null;
+  const targetSaturated = targetBaseline != null && targetBaseline >= 90;
 
   // Derived instead of synced: spinning while the scenario is being created or
   // while a job exists that has not finished yet.
@@ -506,6 +520,12 @@ function ScenarioLabContent() {
             <div>
               <label className="block text-[13px] font-black text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] uppercase tracking-wider mb-2">Target ID</label>
               <input type="text" value={targetId} onChange={(e) => setTargetId(e.target.value)} className="w-full bg-[#11181c] border border-slate-700/80 rounded p-2 text-xs font-bold text-red-400 focus:outline-none focus:border-red-500" />
+              {targetSaturated && (
+                <p className="mt-1.5 flex items-start gap-1.5 text-[10px] font-bold leading-snug text-amber-400">
+                  <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                  Baseline risk is already {targetBaseline}/100. Severity changes will barely move this target on the map. Pick a lower-risk target such as the Strait of Malacca to see the map react.
+                </p>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -607,8 +627,8 @@ function ScenarioLabContent() {
                  {assets.length > 0 ? (
                    <MapViewer
                      assets={assets}
-                     routes={routes}
-                     chokepoints={chokepoints}
+                     routes={displayRoutes}
+                     chokepoints={displayChokepoints}
                      onFeatureSelect={(f: SelectedMapFeature) => {
                        setTargetId(f.id);
                        setScenarioName(`Disruption: ${f.name}`);

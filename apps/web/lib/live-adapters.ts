@@ -283,7 +283,9 @@ export function adaptScenarioResults(
   const cascadeRoutes = Array.isArray(cascade.affected_routes) ? cascade.affected_routes : [];
   if (gap == null || (gap === 0 && cascadeRoutes.length === 0)) {
     // presentation_model flags this so the UI can label it as an estimate.
-    return { ...base, presentation_model: true, cascade: { initial_disruption: { target: params.targetId } } };
+    // Raw fields (e.g. impacted_routes/impacted_chokepoints map overlays) are
+    // kept; base only replaces the presentation fields.
+    return { ...raw, ...base, presentation_model: true, cascade: { initial_disruption: { target: params.targetId } } };
   }
 
   const p50 = num(uncertainty.p50) ?? gap ?? base.monte_carlo.p50_gap;
@@ -359,6 +361,38 @@ export function adaptScenarioResults(
         affected_trade_flows: list(cascade.affected_trade_flows ?? blast?.affected_trade_flows),
       },
     },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Scenario overlay: completed jobs carry per-entity risk for the map. The
+// overlay stacks ON TOP of the live baseline (same ids, higher risk), so the
+// map recolors in place when a run completes.
+// ---------------------------------------------------------------------------
+
+export interface ImpactedRoute { route_id: string; risk_score: number; status: string }
+export interface ImpactedChokepoint { chokepoint_id: string; risk_score: number; status: string }
+
+export function applyScenarioOverlay(
+  baseRoutes: SupplyRoute[],
+  baseChokepoints: ChokepointRow[],
+  results: { impacted_routes?: ImpactedRoute[]; impacted_chokepoints?: ImpactedChokepoint[] } | null,
+): { routes: SupplyRoute[]; chokepoints: ChokepointRow[] } {
+  const ir = results?.impacted_routes ?? [];
+  const ic = results?.impacted_chokepoints ?? [];
+  if (!ir.length && !ic.length) return { routes: baseRoutes, chokepoints: baseChokepoints };
+
+  const routeHits = new Map(ir.map(x => [x.route_id, x]));
+  const cpHits = new Map(ic.map(x => [x.chokepoint_id, x]));
+  return {
+    routes: baseRoutes.map(r => {
+      const hit = routeHits.get(r.id);
+      return hit ? { ...r, status: normalizeRouteStatus(hit.status) } : r;
+    }),
+    chokepoints: baseChokepoints.map(c => {
+      const hit = cpHits.get(c.id);
+      return hit ? { ...c, risk: Math.round(hit.risk_score) } : c;
+    }),
   };
 }
 
