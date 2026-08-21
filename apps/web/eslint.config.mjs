@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored maplibre worker bundle (see components/map-viewer.tsx).
+    "public/maplibre/**",
   ]),
 ]);
 

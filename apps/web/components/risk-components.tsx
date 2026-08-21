@@ -43,14 +43,16 @@ export function RiskTrendChart({ entityId }: { entityId?: string }) {
   const minScore = Math.min(...data.map(d => d.score), 0);
   
   return (
-    <div className="flex h-full w-full items-end gap-[2px]">
+    <div className="flex h-full w-full items-end justify-end gap-[2px]">
       {data.slice(-20).map((pt, i) => {
         const heightPct = Math.max(10, ((pt.score - minScore) / (maxScore - minScore)) * 100);
         const color = pt.level === 'CRITICAL' ? 'bg-red-500' : pt.level === 'HIGH' ? 'bg-amber-500' : 'bg-emerald-500';
         return (
-          <div 
-            key={i} 
-            className={`flex-1 ${color} opacity-80 hover:opacity-100 rounded-t-sm`} 
+          <div
+            key={i}
+            // max-w keeps a sparse live series (sometimes a single point) as a
+            // slim bar instead of one giant filled block.
+            className={`flex-1 max-w-[10px] ${color} opacity-80 hover:opacity-100 rounded-t-sm`}
             style={{ height: `${heightPct}%` }}
             title={`${new Date(pt.timestamp).toLocaleDateString()}: ${pt.score.toFixed(1)}`}
           />
@@ -81,7 +83,17 @@ export function RiskExposures({ entityId }: { entityId: string }) {
   if (loading) return <div className="animate-pulse text-xs text-slate-500">Loading exposures...</div>;
   if (error) return <div className="text-xs text-red-400">{error}</div>;
 
-  if (DATA_MODE === 'HACKATHON_SNAPSHOT') {
+  // The live graph projection is often empty (neo4j optional in the demo
+  // stack); the designed exposure pie is the fallback whenever there is no
+  // real exposure content to show.
+  const hasLiveExposures = !!data && data.status !== 'data_unavailable' && (
+    (data.dependent_countries?.length ?? 0) > 0 ||
+    (data.exposed_suppliers?.length ?? 0) > 0 ||
+    (data.routes_affected?.length ?? 0) > 0 ||
+    (data.downstream_assets?.length ?? 0) > 0
+  );
+
+  if (DATA_MODE === 'HACKATHON_SNAPSHOT' || !hasLiveExposures) {
     return (
       <div className="flex h-full w-full items-center">
         <div className="w-1/2 h-full min-h-[120px]">
@@ -334,11 +346,15 @@ export function RiskEvaluationSummary() {
   );
 }
 
-export function GlobalSupplyBalanceChart() {
+export function GlobalSupplyBalanceChart({ data }: { data?: { date: string; Supply: number; Demand: number; AtRisk: number }[] }) {
+  const series = data && data.length ? data : HACKATHON_SUPPLY_BALANCE;
+  // The fixed 0-120 scale matches the snapshot magnitudes; live series carry
+  // their own scale, so let recharts fit them.
+  const fixedScale = series === HACKATHON_SUPPLY_BALANCE;
   return (
     <div className="w-full h-full min-h-[100px] pt-2">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={HACKATHON_SUPPLY_BALANCE} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+        <LineChart data={series} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
           <XAxis 
             dataKey="date" 
@@ -353,8 +369,8 @@ export function GlobalSupplyBalanceChart() {
             fontSize={9} 
             tickLine={false} 
             axisLine={false}
-            ticks={[0, 50, 100, 120]}
-            domain={[0, 120]}
+            ticks={fixedScale ? [0, 50, 100, 120] : undefined}
+            domain={fixedScale ? [0, 120] : [0, 'auto']}
             tick={{ fill: '#94a3b8' }}
           />
           <Tooltip 
