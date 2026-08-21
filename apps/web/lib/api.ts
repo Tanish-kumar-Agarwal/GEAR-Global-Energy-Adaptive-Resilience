@@ -228,7 +228,11 @@ export class ApiClient {
       throw new Error(`API Error: ${response.statusText}`);
     }
 
-    return response.json() as Promise<T>;
+    const data = await response.json();
+    if (data && typeof data === 'object' && 'status' in data && data.status === 'data_unavailable') {
+      throw new Error(`Data unavailable from live backend for ${endpoint}`);
+    }
+    return data as T;
   }
 
   // World / War Room
