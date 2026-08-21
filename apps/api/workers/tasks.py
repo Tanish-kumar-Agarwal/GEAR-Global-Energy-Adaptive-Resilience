@@ -2,6 +2,7 @@ from .celery_app import celery_app
 from core.database import SessionLocal
 from models.domain import Job, JobStatus, TradeFlow, Route, EnergyAsset, DecisionAudit, Country, Scenario
 from simulation.monte_carlo.runner import run_monte_carlo
+from simulation.cascade.impact import compute_geo_impact
 from optimization.procurement import optimize_procurement
 import logging
 from datetime import datetime, timezone
@@ -43,7 +44,14 @@ def execute_scenario_simulation(self, job_id: str, target_id: str, severity: flo
 
         from graph.algorithms.scenario_overlay import generate_scenario_overlay
         scenario_overlay = generate_scenario_overlay(job_id, target_id, severity)
-        
+
+        # Per-entity map overlay: risk per route id / chokepoint id so the
+        # frontend can recolor the map for this scenario
+        geo_impact = compute_geo_impact(
+            db, target_id, severity, duration_days,
+            affected_route_ids=mc_results["cascade"].get("affected_routes", [])
+        )
+
         job.result = {
             "cascade": mc_results["cascade"],
             "impact": mc_results["impact"],
@@ -53,13 +61,16 @@ def execute_scenario_simulation(self, job_id: str, target_id: str, severity: flo
             "data_sources": mc_results.get("data_sources", []),
             "methodology": mc_results.get("methodology", []),
             "economic_impact": economic_impact,
-            "graph_overlay": scenario_overlay
+            "graph_overlay": scenario_overlay,
+            "impacted_routes": geo_impact["impacted_routes"],
+            "impacted_chokepoints": geo_impact["impacted_chokepoints"]
         }
         job.status = JobStatus.COMPLETED
         db.commit()
         return "Success"
     except Exception as e:
-        logger.error(f"Job {job_id} failed: {str(e)}")
+        import traceback
+        logger.error(f"Job {job_id} failed: {str(e)}\n{traceback.format_exc()}")
         job.status = JobStatus.FAILED
         job.error = json.dumps({
             "status": "failed",

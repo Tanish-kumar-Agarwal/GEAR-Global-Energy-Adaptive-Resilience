@@ -220,6 +220,19 @@ def seed_database():
         ]
         db.add_all(events)
 
+        # 9. Route chokepoint linkage, derived from the assets/chokepoints seeded
+        # above. Seeded paths are kept; only missing geometry is filled in.
+        db.flush()
+        from services.route_geometry import derive_route_geometries
+        geometries = derive_route_geometries(db)
+        for route in routes:
+            geo = geometries.get(route.id)
+            if geo:
+                if route.path is None:
+                    route.path = geo["path"]
+                if route.chokepoint_ids is None:
+                    route.chokepoint_ids = geo["chokepoint_ids"]
+
         db.commit()
         print("Database seeded successfully with MVP dataset!")
         print(f"  countries={len(countries)} suppliers={len(suppliers)} chokepoints={len(chokepoints)}")

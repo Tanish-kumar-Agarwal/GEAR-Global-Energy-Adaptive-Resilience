@@ -70,6 +70,10 @@ class SupplyChainService:
                     "utilisation": round(utilisation, 3),
                     "transit_time_days": route.transit_time_days,
                     "chokepoint_id": route.chokepoint_id,
+                    # Full ordered linkage from route geometry; falls back to the
+                    # single declared FK for rows the backfill has not touched.
+                    "chokepoint_ids": route.chokepoint_ids
+                    or ([route.chokepoint_id] if route.chokepoint_id else []),
                     "chokepoint": chokepoint.name if chokepoint else None,
                     "risk_score": score,
                     "risk_source": (

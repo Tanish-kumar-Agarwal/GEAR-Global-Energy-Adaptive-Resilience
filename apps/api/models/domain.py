@@ -91,6 +91,8 @@ class Route(Base):
     chokepoint_id = Column(String, ForeignKey("chokepoints.id"), nullable=True)
     # Ordered [lng, lat] waypoints for map rendering. Null routes are simply not drawn.
     path = Column(JSON, nullable=True)
+    # Ordered chokepoint ids the route passes through (same order as in path)
+    chokepoint_ids = Column(JSON, nullable=True)
 
 class Chokepoint(Base):
     __tablename__ = "chokepoints"
