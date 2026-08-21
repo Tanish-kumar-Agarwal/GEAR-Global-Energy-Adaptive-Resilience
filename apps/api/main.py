@@ -24,6 +24,10 @@ from core.database import engine, Base, SessionLocal
 from models import domain
 Base.metadata.create_all(bind=engine)
 
+# create_all never re-adds a dropped column; this does, loudly (see module doc).
+from core.schema_guard import ensure_route_geometry_schema
+ensure_route_geometry_schema(engine, SessionLocal)
+
 from middleware.request_context import RequestContextMiddleware
 app.add_middleware(RequestContextMiddleware)
 
