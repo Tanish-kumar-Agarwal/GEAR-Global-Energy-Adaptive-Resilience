@@ -1,0 +1,51 @@
+{
+  "source_id": "YAHOO_FINANCE_CHART_V8_SNAPSHOT",
+  "source_ref": "https://query1.finance.yahoo.com/v8/finance/chart/",
+  "note": "Offline fallback. Real observations captured from the live feed at the timestamps below; the API reports their age so they are never presented as current.",
+  "observations": [
+    {
+      "symbol": "API2_COAL",
+      "name": "Coal (API2 Rotterdam)",
+      "commodity_id": null,
+      "price": 104.75,
+      "currency": "USD",
+      "unit": "USD/t",
+      "change_pct": 8.32,
+      "observed_at": "2025-02-06T09:12:41+00:00",
+      "source_ref": "https://query1.finance.yahoo.com/v8/finance/chart/MTF=F"
+    },
+    {
+      "symbol": "BRENT",
+      "name": "Brent Crude (ICE front month)",
+      "commodity_id": "CRUDE_OIL",
+      "price": 93.35,
+      "currency": "USD",
+      "unit": "USD/bbl",
+      "change_pct": 2.73,
+      "observed_at": "2026-08-21T11:31:31+00:00",
+      "source_ref": "https://query1.finance.yahoo.com/v8/finance/chart/BZ=F"
+    },
+    {
+      "symbol": "HENRY_HUB",
+      "name": "Natural Gas (Henry Hub)",
+      "commodity_id": "LNG",
+      "price": 2.791,
+      "currency": "USD",
+      "unit": "USD/MMBtu",
+      "change_pct": 3.75,
+      "observed_at": "2026-08-21T11:31:27+00:00",
+      "source_ref": "https://query1.finance.yahoo.com/v8/finance/chart/NG=F"
+    },
+    {
+      "symbol": "WTI",
+      "name": "WTI Crude (NYMEX front month)",
+      "commodity_id": "CRUDE_OIL",
+      "price": 86.4,
+      "currency": "USD",
+      "unit": "USD/bbl",
+      "change_pct": 2.25,
+      "observed_at": "2026-08-21T11:31:31+00:00",
+      "source_ref": "https://query1.finance.yahoo.com/v8/finance/chart/CL=F"
+    }
+  ]
+}

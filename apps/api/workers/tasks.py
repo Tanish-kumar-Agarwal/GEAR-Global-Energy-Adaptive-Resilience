@@ -2,6 +2,8 @@ from .celery_app import celery_app
 from core.database import SessionLocal
 from models.domain import Job, JobStatus, TradeFlow, Route, EnergyAsset, DecisionAudit, Country, Scenario
 from simulation.monte_carlo.runner import run_monte_carlo
+from simulation.cascade.impact import compute_geo_impact
+from optimization.procurement import optimize_procurement
 import logging
 from datetime import datetime, timezone
 import uuid
@@ -28,11 +30,28 @@ def execute_scenario_simulation(self, job_id: str, target_id: str, severity: flo
         mc_results = run_monte_carlo(target_id, severity, duration_days, iterations=50, seed=42)
         
         from services.economic_impact_service import calculate_economic_impact
-        economic_impact = calculate_economic_impact(mc_results, duration_days=duration_days, commodity_price=None)
-        
+        from services.market_service import MarketService
+
+        # Value the gap against the latest ingested crude benchmark. If no observation has
+        # been ingested the valuation reports commodity_price as a missing input.
+        price_source = MarketService(db).get_benchmark_price("BRENT")
+        economic_impact = calculate_economic_impact(
+            mc_results,
+            duration_days=duration_days,
+            commodity_price=price_source["price"] if price_source else None,
+            price_source=price_source,
+        )
+
         from graph.algorithms.scenario_overlay import generate_scenario_overlay
         scenario_overlay = generate_scenario_overlay(job_id, target_id, severity)
-        
+
+        # Per-entity map overlay: risk per route id / chokepoint id so the
+        # frontend can recolor the map for this scenario
+        geo_impact = compute_geo_impact(
+            db, target_id, severity, duration_days,
+            affected_route_ids=mc_results["cascade"].get("affected_routes", [])
+        )
+
         job.result = {
             "cascade": mc_results["cascade"],
             "impact": mc_results["impact"],
@@ -42,13 +61,16 @@ def execute_scenario_simulation(self, job_id: str, target_id: str, severity: flo
             "data_sources": mc_results.get("data_sources", []),
             "methodology": mc_results.get("methodology", []),
             "economic_impact": economic_impact,
-            "graph_overlay": scenario_overlay
+            "graph_overlay": scenario_overlay,
+            "impacted_routes": geo_impact["impacted_routes"],
+            "impacted_chokepoints": geo_impact["impacted_chokepoints"]
         }
         job.status = JobStatus.COMPLETED
         db.commit()
         return "Success"
     except Exception as e:
-        logger.error(f"Job {job_id} failed: {str(e)}")
+        import traceback
+        logger.error(f"Job {job_id} failed: {str(e)}\n{traceback.format_exc()}")
         job.status = JobStatus.FAILED
         job.error = json.dumps({
             "status": "failed",
@@ -92,6 +114,8 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
         cascade = scenario_job.result.get("cascade", {})
         target_id = cascade.get("initial_disruption", {}).get("target")
         duration_days = cascade.get("initial_disruption", {}).get("duration_days", 30)
+        severity = cascade.get("initial_disruption", {}).get("severity", 0.0) or 0.0
+        affected_route_ids = set(cascade.get("affected_routes", []))
         baseline_impact = scenario_job.result.get("impact", {})
         baseline_economic = scenario_job.result.get("economic_impact", {})
         
@@ -120,9 +144,17 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
         final_routes = []
         for r in db_routes:
             if r.id in route_map:
+                # Routes the cascade marked as disrupted lose capacity in
+                # proportion to scenario severity. Without this the optimizer
+                # re-solves the UNDISRUPTED network (total capacity far exceeds
+                # demand) and always reports a shortage of exactly 0, which is
+                # a degenerate result, not a recovery plan.
+                capacity = (r.capacity or 0.0)
+                if r.id in affected_route_ids:
+                    capacity = capacity * (1.0 - severity)
                 final_routes.append({
                     "id": r.id,
-                    "capacity": r.capacity,
+                    "capacity": capacity,
                     "destination_id": route_map[r.id]["dest"],
                     "supplier_id": route_map[r.id]["sup"]
                 })
@@ -138,9 +170,7 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
             for dest, dem in dest_demands.items()
         ]
 
-        # 3. Run optimizer. Imported here so optional native solver libraries do
-        # not prevent the API or other background tasks from starting.
-        from optimization.procurement import optimize_procurement
+        # 3. Run optimizer
         opt_result = optimize_procurement(final_routes, reserves, destinations, duration_days)
 
         if opt_result["status"] != "completed":
@@ -162,7 +192,15 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
         }
         
         from services.economic_impact_service import calculate_economic_impact
-        opt_economic = calculate_economic_impact(synth_mc, duration_days=duration_days, commodity_price=None)
+        from services.market_service import MarketService
+
+        opt_price_source = MarketService(db).get_benchmark_price("BRENT")
+        opt_economic = calculate_economic_impact(
+            synth_mc,
+            duration_days=duration_days,
+            commodity_price=opt_price_source["price"] if opt_price_source else None,
+            price_source=opt_price_source,
+        )
         
         # 5. Calculate Avoided Loss (if both are available)
         avoided_loss = "data_unavailable"
@@ -193,7 +231,10 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
             "resilience": opt_result["resilience"],
             "avoided_loss": avoided_loss,
             "constraints": ["Route capacities", "Reserve capacities", "Demand satisfaction"],
-            "assumptions": ["Storage draws are linear over duration", "Full route capacity is accessible"],
+            "assumptions": [
+                "Storage draws are linear over duration",
+                "Routes the cascade marked as disrupted keep capacity * (1 - severity); all other routes are fully accessible",
+            ],
             "provenance": ["PostgreSQL EnergyAsset", "PostgreSQL Route", "Phase 4.3 Cascade"],
             "methodology": "OR-Tools GLOP optimization minimizing physical unmet demand."
         }

@@ -67,20 +67,29 @@ def load_full_graph_projection():
                 "MERGE (n:Route {id: $id}) SET n.name = $name, n.capacity = $cap",
                 id=r.id, name=r.name, cap=r.capacity
             )
-        
+
         chokepoints = db.query(Chokepoint).all()
         for chk in chokepoints:
             neo4j_client.execute_write(
-                "MERGE (n:Chokepoint {id: $id}) SET n.name = $name",
-                id=chk.id, name=chk.name
+                "MERGE (n:Chokepoint {id: $id}) SET n.name = $name, n.region = $region",
+                id=chk.id, name=chk.name, region=chk.region
             )
-            neo4j_client.execute_write(
-                """
-                MATCH (r:Route), (c:Chokepoint)
-                WHERE r.name CONTAINS 'Hormuz' AND c.id = 'CHK_HORMUZ'
-                MERGE (r)-[:PASSES_THROUGH]->(c)
-                """
-            )
+
+        # PASSES_THROUGH comes from the full Route.chokepoint_ids linkage (with the
+        # single chokepoint_id FK as fallback), so a route through several straits
+        # projects an edge to each. Projecting only the primary FK left secondary
+        # chokepoints like Malacca with zero dependents, which made every cascade
+        # targeting them come back empty.
+        for r in routes:
+            linked = r.chokepoint_ids or ([r.chokepoint_id] if r.chokepoint_id else [])
+            for chokepoint_id in linked:
+                neo4j_client.execute_write(
+                    """
+                    MATCH (r:Route {id: $r_id}), (c:Chokepoint {id: $c_id})
+                    MERGE (r)-[:PASSES_THROUGH]->(c)
+                    """,
+                    r_id=r.id, c_id=chokepoint_id
+                )
 
         # 6. Trade Flows (The core dependency edges and nodes)
         flows = db.query(TradeFlow).all()

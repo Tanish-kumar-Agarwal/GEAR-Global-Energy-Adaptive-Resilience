@@ -49,32 +49,52 @@ class StrategyService:
             "resilience": {
                 "supply_resilience": {"score": "DATA_UNAVAILABLE", "reason": "Requires full graph re-simulation"},
                 "route_resilience": {"score": "DATA_UNAVAILABLE"},
-                "dependency_concentration": {"before": 0.8, "after": 0.6} # example physical calculation delta
+                # Previously a hardcoded 0.8 -> 0.6 "example" that looked like a
+                # real computation. Honest until the re-simulation exists.
+                "dependency_concentration": {
+                    "status": "DATA_UNAVAILABLE",
+                    "reason": "Requires graph re-simulation; not yet computed",
+                },
             },
             "economic_impact": {
                 "status": "DATA_UNAVAILABLE",
                 "avoided_loss": "DATA_UNAVAILABLE",
                 "reason": "CapEx and route costs are missing from authoritative inputs"
             },
-            "provenance": [
-                {"source": "StrategyOverlay", "action": "Supplier Diversification", "timestamp": datetime.now(timezone.utc).isoformat()}
-            ],
             "assumptions": [
                 "Assumes baseline demand remains constant",
                 "Financial costs excluded due to missing authoritative data"
             ]
         }
-        
-        # Calculate dependency shifts based on levers
-        # e.g., if lever is "Supplier Diversification", check physical limits of supplier
+
+        # Levers arrive as free-form dicts from the UI, so be tolerant about
+        # key and type spelling ("supplier-diversification", "Supplier
+        # Diversification", target_id vs supplier_id) instead of silently
+        # returning an empty list on any mismatch.
+        def _lever_type(lever):
+            raw = lever.get("type") or lever.get("lever") or ""
+            return str(raw).strip().lower().replace("-", "_").replace(" ", "_")
+
+        def _lever_target(lever):
+            return lever.get("target_id") or lever.get("supplier_id") or lever.get("target")
+
         affected_suppliers = []
-        for lever in strategy.levers:
-            if lever.get("type") == "supplier_diversification":
-                sup_id = lever.get("target_id")
-                sup = self.db.query(Supplier).filter(Supplier.id == sup_id).first()
-                if sup:
-                    affected_suppliers.append(sup.name)
-        
+        provenance = []
+        for lever in strategy.levers or []:
+            lever_type = _lever_type(lever)
+            target = _lever_target(lever)
+            provenance.append({
+                "source": "StrategyOverlay",
+                "action": lever_type or "unknown_lever",
+                "target": target,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+            if lever_type == "supplier_diversification" and target:
+                sup = self.db.query(Supplier).filter(Supplier.id == target).first()
+                # Truthful even when the id is unknown: report what was targeted.
+                affected_suppliers.append(sup.name if sup else str(target))
+
+        result["provenance"] = provenance
         result["strategic_state"] = {
             "affected_suppliers": affected_suppliers
         }
