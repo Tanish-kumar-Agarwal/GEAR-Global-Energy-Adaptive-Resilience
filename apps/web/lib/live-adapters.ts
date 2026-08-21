@@ -9,7 +9,6 @@ import {
   RouteStatus,
   HACKATHON_SUPPLY_ROUTES,
   HACKATHON_CHOKEPOINTS,
-  buildHackathonScenarioResults,
 } from '@/data/snapshot';
 
 // ---------------------------------------------------------------------------
@@ -250,9 +249,11 @@ export function toSupplyChainStages(scs: {
 
 // ---------------------------------------------------------------------------
 // Scenario results: live jobs return cascade/impact/uncertainty/economic_impact
-// but not the presentation extras (key_metrics, india_impact, affected_volumes).
-// Real simulation numbers always win; the modeled extras are derived from the
-// same severity model the snapshot uses, anchored on live prices where present.
+// but not the presentation shape the panels read. HONESTY RULE: every field is
+// either derived from the actual job result or null. The UI renders null as an
+// explicit unavailable state; zeros are real results and render as zeros.
+// Nothing here is modeled, backfilled, or substituted. (Offline snapshot runs
+// pass through untouched; they are labeled OFFLINE SNAPSHOT RUN by the page.)
 // ---------------------------------------------------------------------------
 
 type Num = number | null;
@@ -265,55 +266,29 @@ export function adaptScenarioResults(
   if (!raw) return raw;
   if ('key_metrics' in raw) return raw; // snapshot shape, already presentation-ready
 
-  const base = buildHackathonScenarioResults(params.targetId, params.severity, params.duration);
   const impact = (raw.impact ?? {}) as Record<string, unknown>;
   const uncertainty = (raw.uncertainty ?? {}) as Record<string, unknown>;
   const econ = (raw.economic_impact ?? {}) as Record<string, unknown>;
   const econImpact = (econ.impact ?? {}) as Record<string, unknown>;
   const econUnc = (econ.uncertainty ?? {}) as Record<string, unknown>;
   const cascade = (raw.cascade ?? {}) as Record<string, unknown>;
-  const priceSource = (econ.price_source ?? {}) as Record<string, unknown>;
 
   const gap = num(impact.supply_gap);
   const baseline = num(impact.baseline_supply);
+  const p50 = num(uncertainty.p50) ?? gap;
+  const gapPct = gap != null && baseline ? Math.round((gap / baseline) * 100) : null;
 
-  // A zero gap with an empty cascade means the graph has no model for this
-  // target (e.g. a chokepoint outside the seeded dataset). Fall back to the
-  // severity model entirely instead of rendering an all-zero lab.
-  const cascadeRoutes = Array.isArray(cascade.affected_routes) ? cascade.affected_routes : [];
-  if (gap == null || (gap === 0 && cascadeRoutes.length === 0)) {
-    // presentation_model flags this so the UI can label it as an estimate.
-    return { ...base, presentation_model: true, cascade: { initial_disruption: { target: params.targetId } } };
-  }
-
-  const p50 = num(uncertainty.p50) ?? gap ?? base.monte_carlo.p50_gap;
-  const gapPct = gap != null && baseline ? Math.round((gap / baseline) * 100) : base.key_metrics.supply_gap_pct;
-
-  // Storage depletion arrives per-asset; the UI shows one % plus days.
+  // Storage depletion arrives per-asset; empty means the job produced no
+  // storage data, which renders as unavailable, not as a number.
   const storage = impact.storage_depletion as Record<string, { days_remaining?: number; depleted?: boolean }> | undefined;
   const storageEntries = storage && typeof storage === 'object' ? Object.values(storage) : [];
-  const depletedCount = storageEntries.filter(s => s.depleted).length;
   const depletionPct = storageEntries.length
-    ? Math.round((100 * depletedCount) / storageEntries.length)
-    : base.impact.storage_depletion;
+    ? Math.round((100 * storageEntries.filter(s => s.depleted).length) / storageEntries.length)
+    : null;
   const daysRemaining = storageEntries
     .map(s => num(s.days_remaining))
     .filter((d): d is number => d != null);
-  const reserveDays = daysRemaining.length ? Math.min(...daysRemaining) : Number(base.key_metrics.reserve_depletion_days);
-
-  const brent = num(priceSource.price);
-  const oilPriceUsd = brent != null
-    ? Math.round(brent * (1 + 0.34 * params.severity))
-    : base.key_metrics.oil_price_usd;
-
-  const econTotal = num(econImpact.total);
-  // Backend prices only the components it has market data for; the rest are
-  // modeled shares of the REAL total so every card stays numeric.
-  const priced = (key: string, share: number): number => {
-    const real = num(econImpact[key]);
-    if (real != null) return real;
-    return econTotal != null ? +(econTotal * share).toFixed(1) : (base.economic_impact.impact as Record<string, number>)[key];
-  };
+  const reserveDays = daysRemaining.length ? +Math.min(...daysRemaining).toFixed(1) : null;
 
   const blast = (raw.graph_overlay as Record<string, unknown> | undefined)?.blast_radius as Record<string, unknown> | undefined;
   const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
@@ -321,35 +296,43 @@ export function adaptScenarioResults(
   return {
     ...raw,
     key_metrics: {
-      ...base.key_metrics,
       supply_gap_pct: gapPct,
-      supply_gap_mbd: gap ?? base.key_metrics.supply_gap_mbd,
-      oil_price_usd: oilPriceUsd,
-      reserve_depletion_days: +reserveDays.toFixed(1),
+      supply_gap_mbd: gap,
+      oil_price_usd: null,
+      oil_price_pct: null,
+      lng_price_usd: null,
+      lng_price_pct: null,
+      reserve_depletion_days: reserveDays,
+      reserve_depletion_pct: null,
+      shipping_cost_index: null,
+      shipping_cost_pct: null,
+      refinery_utilization_pct: null,
+      refinery_utilization_delta_pct: null,
+      port_congestion_pct: null,
+      rerouted_flows: null,
+      avg_delay_days: null,
+      volatility_pct: null,
     },
-    india_impact: base.india_impact,
-    affected_volumes: base.affected_volumes,
-    cascade: { ...base.cascade, ...cascade },
+    india_impact: null,
+    affected_volumes: null,
+    cascade: { initial_disruption: { target: params.targetId }, ...cascade },
     impact: { supply_gap: p50, storage_depletion: depletionPct },
     monte_carlo: {
-      p10_gap: num(uncertainty.p10) ?? base.monte_carlo.p10_gap,
+      p10_gap: num(uncertainty.p10),
       p50_gap: p50,
-      p90_gap: num(uncertainty.p90) ?? base.monte_carlo.p90_gap,
+      p90_gap: num(uncertainty.p90),
     },
-    uncertainty: { sample_count: num(uncertainty.sample_count) ?? base.uncertainty.sample_count },
+    uncertainty: { sample_count: num(uncertainty.sample_count) },
     economic_impact: {
       impact: {
-        total: econTotal ?? base.economic_impact.impact.total,
-        supply_shortage: priced('supply_shortage', 0.39),
-        price_impact: priced('price_impact', 0.28),
-        replacement_procurement: priced('replacement_procurement', 0.19),
-        logistics: priced('logistics', 0.09),
-        reserve: priced('reserve', 0.05),
+        total: num(econImpact.total),
+        supply_shortage: num(econImpact.supply_shortage),
+        price_impact: num(econImpact.price_impact),
+        replacement_procurement: num(econImpact.replacement_procurement),
+        logistics: num(econImpact.logistics),
+        reserve: num(econImpact.reserve),
       },
-      uncertainty: {
-        p10: num(econUnc.p10) ?? base.economic_impact.uncertainty.p10,
-        p90: num(econUnc.p90) ?? base.economic_impact.uncertainty.p90,
-      },
+      uncertainty: { p10: num(econUnc.p10), p90: num(econUnc.p90) },
     },
     graph_overlay: {
       blast_radius: {
@@ -359,6 +342,100 @@ export function adaptScenarioResults(
         affected_trade_flows: list(cascade.affected_trade_flows ?? blast?.affected_trade_flows),
       },
     },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Scenario overlay: completed jobs carry per-entity risk for the map. The
+// overlay stacks ON TOP of the live baseline (same ids, higher risk), so the
+// map recolors in place when a run completes.
+// ---------------------------------------------------------------------------
+
+export interface ImpactedRoute { route_id: string; risk_score: number; status: string }
+export interface ImpactedChokepoint { chokepoint_id: string; risk_score: number; status: string }
+
+export type OverlayRoute = SupplyRoute & { pinned?: boolean };
+export type OverlayChokepoint = ChokepointRow & { pinned?: boolean };
+
+export function applyScenarioOverlay(
+  baseRoutes: SupplyRoute[],
+  baseChokepoints: ChokepointRow[],
+  results: { impacted_routes?: ImpactedRoute[]; impacted_chokepoints?: ImpactedChokepoint[] } | null,
+  // Entities already saturated at baseline (from the preview's saturated
+  // array): marked pinned so the map can de-emphasize them and let the
+  // entities that actually MOVE with the slider carry the signal.
+  saturatedIds?: string[],
+): { routes: OverlayRoute[]; chokepoints: OverlayChokepoint[] } {
+  const ir = results?.impacted_routes ?? [];
+  const ic = results?.impacted_chokepoints ?? [];
+  if (!ir.length && !ic.length) return { routes: baseRoutes, chokepoints: baseChokepoints };
+
+  const pinned = new Set(saturatedIds ?? []);
+  const routeHits = new Map(ir.map(x => [x.route_id, x]));
+  const cpHits = new Map(ic.map(x => [x.chokepoint_id, x]));
+  return {
+    routes: baseRoutes.map(r => {
+      const hit = routeHits.get(r.id);
+      return hit ? { ...r, status: normalizeRouteStatus(hit.status), pinned: pinned.has(r.id) } : r;
+    }),
+    chokepoints: baseChokepoints.map(c => {
+      const hit = cpHits.get(c.id);
+      return hit ? { ...c, risk: Math.round(hit.risk_score), pinned: pinned.has(c.id) } : c;
+    }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Severity preview: POST /scenarios/preview returns a fast estimate overlay.
+// Same impacted_* vocabulary as completed runs, so applyScenarioOverlay works
+// unchanged. is_estimate/mode exist so the UI can (and must) label it.
+// ---------------------------------------------------------------------------
+
+export interface ScenarioPreview {
+  status: string;
+  mode: 'preview';
+  is_estimate: boolean;
+  method?: string;
+  computed_ms?: number;
+  impacted_routes: ImpactedRoute[];
+  impacted_chokepoints: ImpactedChokepoint[];
+  saturated?: string[];
+}
+
+function statusForRisk(risk: number): string {
+  return risk >= 70 ? 'disrupted' : risk >= 40 ? 'at_risk' : 'stable';
+}
+
+// Local stand-in for the backend preview endpoint, used ONLY while the
+// endpoint is not deployed (404/501), never on transient errors. Mirrors the
+// backend's stacking behavior: severity pushes the target from its live
+// baseline toward 100, and routes through the target follow.
+export function buildPreviewStub(
+  targetId: string,
+  severity: number,
+  chokepoints: ChokepointRow[],
+  routeChokepoint: Record<string, string | null | undefined>,
+): ScenarioPreview {
+  const target = chokepoints.find(c => c.id === targetId);
+  const baseline = target?.risk ?? 30;
+  const saturated = baseline >= 90 ? [targetId] : [];
+  const risk = Math.min(100, Math.round(baseline + (100 - baseline) * severity));
+
+  const impacted_chokepoints: ImpactedChokepoint[] = target
+    ? [{ chokepoint_id: targetId, risk_score: risk, status: statusForRisk(risk) }]
+    : [];
+  const impacted_routes: ImpactedRoute[] = Object.entries(routeChokepoint)
+    .filter(([, cp]) => cp === targetId)
+    .map(([routeId]) => ({ route_id: routeId, risk_score: risk, status: statusForRisk(risk) }));
+
+  return {
+    status: 'ok',
+    mode: 'preview',
+    is_estimate: true,
+    method: 'client_stub',
+    impacted_routes,
+    impacted_chokepoints,
+    saturated,
   };
 }
 

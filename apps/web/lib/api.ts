@@ -130,6 +130,14 @@ function noteFallback(endpoint: string) {
   fallbackListeners.forEach(cb => cb([...fallbackEndpoints]));
 }
 
+// A live success clears the endpoint's fallback flag, so the badge disappears
+// as soon as real data is flowing again instead of sticking forever.
+function noteLiveSuccess(endpoint: string) {
+  if (fallbackEndpoints.delete(endpoint)) {
+    fallbackListeners.forEach(cb => cb([...fallbackEndpoints]));
+  }
+}
+
 // One login at a time; every caller awaits the same promise.
 let loginPromise: Promise<string | null> | null = null;
 
@@ -166,7 +174,9 @@ export class ApiClient {
     }
 
     try {
-      return await this.liveRequest<T>(endpoint, options);
+      const result = await this.liveRequest<T>(endpoint, options);
+      noteLiveSuccess(endpoint);
+      return result;
     } catch (err) {
       const canned = snapshotResponse(endpoint, options);
       if (canned !== undefined) {
@@ -280,6 +290,38 @@ export class ApiClient {
 
   static async getScenarioResults(scenarioId: string): Promise<ScenarioJobStatus> {
     return this.request<ScenarioJobStatus>(`/scenarios/${scenarioId}/results`);
+  }
+
+  // Live severity preview. Deliberately NOT routed through request(): a
+  // preview must never fall back to snapshot data. Outcomes:
+  //   {data}            live estimate from the backend
+  //   {notImplemented}  endpoint not deployed yet (404/405/501), caller may stub
+  //   null              transient failure or abort, caller keeps last good state
+  static async previewScenario(
+    body: { target_id: string; severity: number; duration_days: number },
+    signal?: AbortSignal,
+  ): Promise<{ data?: import('./live-adapters').ScenarioPreview; notImplemented?: boolean } | null> {
+    if (DATA_MODE === 'HACKATHON_SNAPSHOT') return { notImplemented: true };
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (typeof window !== 'undefined') {
+        const token = localStorage.getItem('gear_token');
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+      }
+      const signals = [AbortSignal.timeout(LIVE_TIMEOUT_MS)];
+      if (signal) signals.push(signal);
+      const response = await fetch(`${API_BASE}/scenarios/preview`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: AbortSignal.any(signals),
+      });
+      if ([404, 405, 501].includes(response.status)) return { notImplemented: true };
+      if (!response.ok) return null;
+      return { data: await response.json() };
+    } catch {
+      return null;
+    }
   }
 
   // Optimization

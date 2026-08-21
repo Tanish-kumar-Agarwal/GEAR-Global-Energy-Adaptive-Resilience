@@ -110,14 +110,25 @@ function AssetPopover({ asset, onClose }: { asset: any, onClose: () => void }) {
       
       <h5 className="text-[10px] uppercase text-slate-500 mb-2">Dependency Analysis (Neo4j Graph)</h5>
       <div className="h-24 bg-slate-900 rounded mb-4 overflow-y-auto p-2 text-[10px] text-slate-400">
-         {loading ? "Analyzing topology..." : (
-           deps?.status === 'data_unavailable' ? "Graph data unavailable" : (
+         {loading ? "Analyzing topology..." : (() => {
+           if (!deps || deps.status === 'data_unavailable') return "Graph data unavailable";
+           // Live graph returns arrays of exposure rows; the older snapshot
+           // shape nests them under .paths. Support both.
+           const upstream = Array.isArray(deps.upstream_exposure) ? deps.upstream_exposure : deps.upstream_exposure?.paths ?? [];
+           const downstream = Array.isArray(deps.downstream_exposure) ? deps.downstream_exposure : deps.downstream_exposure?.paths ?? [];
+           return (
              <div className="flex flex-col gap-1">
-               <div>Upstream Paths: {deps?.upstream_exposure?.paths?.length || 0}</div>
-               <div>Downstream Paths: {deps?.downstream_exposure?.paths?.length || 0}</div>
+               <div>Upstream Paths: {upstream.length}</div>
+               <div>Downstream Paths: {downstream.length}</div>
+               {upstream.slice(0, 3).map((u: { Supplier?: string; Commodity?: string } | string[], i: number) => (
+                 <div key={i} className="text-slate-500 truncate">
+                   {Array.isArray(u) ? u.join(' > ') : `${u.Supplier ?? 'Supplier'} (${u.Commodity ?? 'flow'})`}
+                 </div>
+               ))}
+               {upstream.length > 3 && <div className="text-slate-600">+{upstream.length - 3} more suppliers</div>}
              </div>
-           )
-         )}
+           );
+         })()}
       </div>
 
       <h5 className="text-[10px] uppercase text-slate-500 mb-2">Risk Assessment (MILP ID)</h5>

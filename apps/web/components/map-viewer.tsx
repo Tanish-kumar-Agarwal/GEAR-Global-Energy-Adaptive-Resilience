@@ -36,6 +36,9 @@ export interface MapChokepointInput {
   lat: number;
   lng: number;
   risk: number | null;
+  // Saturated at baseline: in preview mode these are dimmed so the entities
+  // that actually move with the severity slider carry the visual signal.
+  pinned?: boolean;
 }
 
 export interface SelectedMapFeature {
@@ -51,6 +54,10 @@ interface MapViewerProps {
   chokepoints?: MapChokepointInput[];
   visibleLayers?: Record<MapLayerId, boolean>;
   onFeatureSelect?: (feature: SelectedMapFeature) => void;
+  // True while the overlay shows a severity-preview estimate rather than a
+  // completed run: chips and route lines render washed out so an estimate can
+  // never be mistaken for a real simulation result.
+  overlayPreview?: boolean;
 }
 
 const ALL_VISIBLE: Record<MapLayerId, boolean> = {
@@ -104,12 +111,14 @@ const DASH_SEQUENCE: number[][] = [
   [0, 2.5, 3, 1.5], [0, 3, 3, 1], [0, 3.5, 3, 0.5],
 ];
 
-function routesToGeoJSON(routes: SupplyRoute[]): GeoJSON.FeatureCollection {
+type RouteInput = SupplyRoute & { pinned?: boolean };
+
+function routesToGeoJSON(routes: RouteInput[]): GeoJSON.FeatureCollection {
   return {
     type: 'FeatureCollection',
     features: routes.map(r => ({
       type: 'Feature',
-      properties: { id: r.id, name: r.name, status: r.status, commodity: r.commodity },
+      properties: { id: r.id, name: r.name, status: r.status, commodity: r.commodity, pinned: !!r.pinned },
       geometry: { type: 'LineString', coordinates: r.path },
     })),
   };
@@ -136,6 +145,7 @@ function chokepointsToGeoJSON(chokepoints: MapChokepointInput[]): GeoJSON.Featur
         risk: c.risk ?? -1,
         riskLabel: c.risk == null ? 'unscored' : String(c.risk),
         tier: chokepointTier(c.risk),
+        pinned: !!c.pinned,
         type: 'CHOKEPOINT',
       },
       geometry: { type: 'Point', coordinates: [c.lng, c.lat] },
@@ -412,6 +422,7 @@ export function MapViewer({
   chokepoints = HACKATHON_CHOKEPOINTS,
   visibleLayers = ALL_VISIBLE,
   onFeatureSelect,
+  overlayPreview = false,
 }: MapViewerProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -444,6 +455,8 @@ export function MapViewer({
       attributionControl: false,
     });
     map.current = m;
+    // Test handle for browser-level verification of map data (main map only).
+    if (typeof window !== 'undefined') (window as { __gearMap?: maplibregl.Map }).__gearMap = m;
 
     const applyVisibility = () => {
       const vis = visibleRef.current;
@@ -531,6 +544,26 @@ export function MapViewer({
     if (!m || !loaded.current) return;
     (m.getSource('chokepoints') as maplibregl.GeoJSONSource | undefined)?.setData(chokepointsToGeoJSON(chokepoints));
   }, [chokepoints]);
+
+  // Preview styling: entities saturated at baseline (pinned) fade far back so
+  // the ones that actually move with the slider carry the signal; the dashed
+  // PREVIEW banner over the map marks the whole state as an estimate.
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !loaded.current) return;
+    const pinnedDim = (normal: number, dimmed: number): maplibregl.ExpressionSpecification =>
+      ['case', ['==', ['get', 'pinned'], true], dimmed, normal];
+    if (m.getLayer('chokepoints-label')) {
+      m.setPaintProperty('chokepoints-label', 'icon-opacity', overlayPreview ? pinnedDim(0.95, 0.3) : 1);
+      m.setPaintProperty('chokepoints-label', 'text-opacity', overlayPreview ? pinnedDim(0.95, 0.4) : 1);
+    }
+    if (m.getLayer('routes-line')) {
+      m.setPaintProperty('routes-line', 'line-opacity', overlayPreview ? pinnedDim(0.85, 0.25) : 0.95);
+    }
+    if (m.getLayer('routes-glow')) {
+      m.setPaintProperty('routes-glow', 'line-opacity', overlayPreview ? pinnedDim(0.18, 0.05) : 0.18);
+    }
+  }, [overlayPreview]);
 
   // Layer toggling: one setLayoutProperty per MapLibre layer in the group.
   useEffect(() => {
