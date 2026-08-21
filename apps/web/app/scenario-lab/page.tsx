@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { Activity, Loader2, Download, Share2, Search, AlertTriangle, Anchor, Globe, Clock, Zap, MapPin, BarChart2, Gauge, ArrowDownCircle, DollarSign, Flame, Building, Ship, Factory, Copy } from 'lucide-react';
 import { MapViewer, SelectedMapFeature, MapAssetInput } from '@/components/map-viewer';
 import { SnapshotFallbackBadge } from '@/components/snapshot-badge';
+import { TargetMiniMap, MiniMapTarget } from '@/components/target-mini-map';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { ApiClient } from '@/lib/api';
 import { useJobPolling } from '@/lib/useJobPolling';
@@ -43,6 +44,13 @@ interface SavedScenario {
   p50Gap: number | null;
   econTotal: number | null;
   savedAt: string;
+}
+
+// Formats a possibly-missing metric. null/undefined renders as an explicit
+// '--' so a panel with no live data can never fabricate a number; zeros are
+// real results and render as zeros.
+function fv(v: number | string | null | undefined, prefix = '', suffix = ''): string {
+  return v == null ? '--' : `${prefix}${v}${suffix}`;
 }
 
 function severityLabel(s: number): { text: string; cls: string } {
@@ -205,6 +213,21 @@ function ScenarioLabContent() {
     [routes, chokepoints, activeOverlay, saturatedIds],
   );
 
+  // Coordinates for the target-selector mini map. null = unknown entity, the
+  // mini map shows an explicit unavailable state instead of a wrong place.
+  const targetEntity: MiniMapTarget | null = useMemo(() => {
+    const cp = chokepoints.find(c => c.id === targetId);
+    if (cp) return { id: cp.id, name: cp.name, lat: cp.lat, lng: cp.lng, kind: 'chokepoint' };
+    const asset = assets.find(a => a.id === targetId);
+    if (asset) return { id: asset.id, name: asset.name, lat: asset.lat, lng: asset.lng, kind: 'asset' };
+    return null;
+  }, [targetId, chokepoints, assets]);
+
+  // The previewed risk of the selected target, for the mini-map marker.
+  const targetPreviewRisk = previewShown
+    ? preview.data.impacted_chokepoints.find(c => c.chokepoint_id === targetId)?.risk_score ?? null
+    : null;
+
   // A target already at or near maximum baseline risk cannot visibly react to
   // the severity slider; say so instead of looking broken. The preview
   // endpoint reports the same condition via its saturated array.
@@ -320,14 +343,14 @@ function ScenarioLabContent() {
       ['Duration (days)', String(duration)],
       [],
       ['Metric', 'Value'],
-      ['Supply Gap P10 (M bbl)', results.monte_carlo?.p10_gap],
-      ['Supply Gap P50 (M bbl)', results.monte_carlo?.p50_gap],
-      ['Supply Gap P90 (M bbl)', results.monte_carlo?.p90_gap],
-      ['Economic Impact Total ($B)', results.economic_impact?.impact?.total],
-      ['Oil Price ($/bbl)', km.oil_price_usd],
-      ['LNG Price ($/MMBtu)', km.lng_price_usd],
-      ['Shipping Cost Index', km.shipping_cost_index],
-      ['Refinery Utilization (%)', km.refinery_utilization_pct],
+      ['Supply Gap P10 (M bbl)', fv(results.monte_carlo?.p10_gap)],
+      ['Supply Gap P50 (M bbl)', fv(results.monte_carlo?.p50_gap)],
+      ['Supply Gap P90 (M bbl)', fv(results.monte_carlo?.p90_gap)],
+      ['Economic Impact Total ($B)', fv(results.economic_impact?.impact?.total)],
+      ['Oil Price ($/bbl)', fv(km.oil_price_usd)],
+      ['LNG Price ($/MMBtu)', fv(km.lng_price_usd)],
+      ['Shipping Cost Index', fv(km.shipping_cost_index)],
+      ['Refinery Utilization (%)', fv(km.refinery_utilization_pct)],
       [],
       ['Commodity', 'Baseline (Mb/d)', 'After Scenario', 'Change (%)'],
       ...(results.affected_volumes || []).map((v: { commodity: string; baseline: number; after: number; change_pct: number }) =>
@@ -353,13 +376,13 @@ function ScenarioLabContent() {
       <p>Target: <b>${targetId}</b> - Severity: <b>${Math.round(severity * 100)}%</b> - Duration: <b>${duration} days</b> - Scenario ID: <b>${scenarioId ?? 'n/a'}</b></p>
       <h2>Monte Carlo Supply Gap (M bbl)</h2>
       <table><tr><th>P10</th><th>P50</th><th>P90</th><th>Simulations</th></tr>
-      <tr><td>${results.monte_carlo?.p10_gap}</td><td>${results.monte_carlo?.p50_gap}</td><td>${results.monte_carlo?.p90_gap}</td><td>${results.uncertainty?.sample_count}</td></tr></table>
+      <tr><td>${fv(results.monte_carlo?.p10_gap)}</td><td>${fv(results.monte_carlo?.p50_gap)}</td><td>${fv(results.monte_carlo?.p90_gap)}</td><td>${fv(results.uncertainty?.sample_count)}</td></tr></table>
       <h2>Key Metrics</h2>
       <table><tr><th>Oil Price</th><th>LNG Price</th><th>Shipping Index</th><th>Refinery Utilization</th><th>Reserve Depletion</th></tr>
-      <tr><td>$${km.oil_price_usd}/bbl</td><td>$${km.lng_price_usd}/MMBtu</td><td>${km.shipping_cost_index}</td><td>${km.refinery_utilization_pct}%</td><td>${km.reserve_depletion_days} days</td></tr></table>
+      <tr><td>${fv(km.oil_price_usd, '$', '/bbl')}</td><td>${fv(km.lng_price_usd, '$', '/MMBtu')}</td><td>${fv(km.shipping_cost_index)}</td><td>${fv(km.refinery_utilization_pct, '', '%')}</td><td>${fv(km.reserve_depletion_days, '', ' days')}</td></tr></table>
       <h2>Economic Impact (India)</h2>
       <table><tr><th>Fuel Price</th><th>Inflation</th><th>Current Account</th><th>GDP</th><th>Total Est. Impact</th></tr>
-      <tr><td>+${ind.fuel_price_pct}%</td><td>+${ind.inflation_pct}%</td><td>-$${ind.current_account_b}B</td><td>-${ind.gdp_pct}%</td><td>$${results.economic_impact?.impact?.total}B</td></tr></table>
+      <tr><td>${fv(ind.fuel_price_pct, '+', '%')}</td><td>${fv(ind.inflation_pct, '+', '%')}</td><td>${fv(ind.current_account_b, '-$', 'B')}</td><td>${fv(ind.gdp_pct, '-', '%')}</td><td>${fv(results.economic_impact?.impact?.total, '$', 'B')}</td></tr></table>
       <h2>Affected Volumes (Mb/d)</h2>
       <table><tr><th>Commodity</th><th>Baseline</th><th>After Scenario</th><th>Change</th></tr>
       ${(results.affected_volumes || []).map((v: { commodity: string; baseline: number; after: number; change_pct: number }) =>
@@ -375,8 +398,12 @@ function ScenarioLabContent() {
     }
   };
 
-  // Generate bell curve data based on backend P10, P50, P90
-  const mcData = results?.monte_carlo ? generateBellCurve(results.monte_carlo.p10_gap, results.monte_carlo.p50_gap, results.monte_carlo.p90_gap) : [];
+  // Generate bell curve data based on backend P10, P50, P90. Only when the
+  // job produced a real spread; zeros/missing render as an empty chart.
+  const mc = results?.monte_carlo;
+  const mcData = mc && mc.p10_gap != null && mc.p50_gap != null && mc.p90_gap != null && mc.p90_gap > mc.p10_gap
+    ? generateBellCurve(mc.p10_gap, mc.p50_gap, mc.p90_gap)
+    : [];
 
   const km = results?.key_metrics;
   const ind = results?.india_impact;
@@ -389,7 +416,7 @@ function ScenarioLabContent() {
 
   const impactCards: Record<ImpactTab, { title: string; value: string; sub: string; icon: React.ReactNode; color: string; graphPath: string }[]> = {
     'Physical Impact': [
-      { title: 'Supply Gap', value: results ? `${results.monte_carlo?.p50_gap}M` : '--', sub: '↓ vs Baseline', icon: <Building className="w-3.5 h-3.5" />, color: 'blue', graphPath: 'M0,25 L10,23 L20,25 L30,20 L40,22 L50,18 L60,20 L70,12 L80,15 L90,8 L100,10' },
+      { title: 'Supply Gap', value: fv(results?.monte_carlo?.p50_gap, '', 'M'), sub: '↓ vs Baseline', icon: <Building className="w-3.5 h-3.5" />, color: 'blue', graphPath: 'M0,25 L10,23 L20,25 L30,20 L40,22 L50,18 L60,20 L70,12 L80,15 L90,8 L100,10' },
       { title: 'Storage Depletion', value: results?.impact?.storage_depletion != null ? `${results.impact.storage_depletion}%` : '--', sub: '↓ vs Baseline', icon: <DatabaseIcon />, color: 'emerald', graphPath: 'M0,26 L15,24 L30,25 L45,20 L60,22 L75,17 L90,19 L100,15' },
       { title: 'Route Disruption', value: results?.graph_overlay ? `${results.graph_overlay.blast_radius?.affected_routes?.length || 0}` : '--', sub: 'Routes Affected', icon: <RouteIcon />, color: 'amber', graphPath: 'M0,24 L10,23 L20,25 L30,22 L40,24 L50,18 L60,14 L70,11 L80,16 L90,18 L100,20' },
       { title: 'Exposed Assets', value: results?.graph_overlay ? `${results.graph_overlay.blast_radius?.affected_assets?.length || 0}` : '--', sub: 'Downstream Assets', icon: <Anchor className="w-3.5 h-3.5" />, color: 'red', graphPath: 'M0,25 L10,22 L20,24 L30,19 L40,21 L50,16 L60,18 L70,14 L80,17 L90,12 L100,15' },
@@ -397,38 +424,38 @@ function ScenarioLabContent() {
       { title: 'Trade Flows', value: results?.graph_overlay ? `${results.graph_overlay.blast_radius?.affected_trade_flows?.length || 0}` : '--', sub: 'Flows Affected', icon: <Clock className="w-3.5 h-3.5" />, color: 'purple', graphPath: 'M0,26 L15,25 L30,27 L45,21 L60,23 L75,17 L90,19 L100,15' },
     ],
     'Logistics Impact': [
-      { title: 'Port Congestion', value: km ? `${km.port_congestion_pct}%` : '--', sub: '↑ vs Baseline', icon: <Anchor className="w-3.5 h-3.5" />, color: 'red', graphPath: 'M0,25 L10,22 L20,24 L30,19 L40,21 L50,16 L60,18 L70,14 L80,17 L90,12 L100,15' },
-      { title: 'Rerouted Flows', value: km ? `${km.rerouted_flows}` : '--', sub: 'Diversions Active', icon: <RouteIcon />, color: 'amber', graphPath: 'M0,24 L10,23 L20,25 L30,22 L40,24 L50,18 L60,14 L70,11 L80,16 L90,18 L100,20' },
-      { title: 'Avg Delivery Delay', value: km ? `${km.avg_delay_days}d` : '--', sub: '↑ vs Baseline', icon: <Clock className="w-3.5 h-3.5" />, color: 'purple', graphPath: 'M0,26 L15,25 L30,27 L45,21 L60,23 L75,17 L90,19 L100,15' },
-      { title: 'Shipping Cost Index', value: km ? `${km.shipping_cost_index}` : '--', sub: '↑ vs Baseline', icon: <Ship className="w-3.5 h-3.5" />, color: 'blue', graphPath: 'M0,25 L10,23 L20,25 L30,20 L40,22 L50,18 L60,20 L70,12 L80,15 L90,8 L100,10' },
-      { title: 'Chokepoint Transit', value: km ? `-${Math.round(km.port_congestion_pct * 0.6)}%` : '--', sub: '↓ Throughput', icon: <Globe className="w-3.5 h-3.5" />, color: 'emerald', graphPath: 'M0,15 L15,14 L30,17 L45,15 L60,21 L75,19 L90,25 L100,24' },
+      { title: 'Port Congestion', value: fv(km?.port_congestion_pct, '', '%'), sub: '↑ vs Baseline', icon: <Anchor className="w-3.5 h-3.5" />, color: 'red', graphPath: 'M0,25 L10,22 L20,24 L30,19 L40,21 L50,16 L60,18 L70,14 L80,17 L90,12 L100,15' },
+      { title: 'Rerouted Flows', value: fv(km?.rerouted_flows), sub: 'Diversions Active', icon: <RouteIcon />, color: 'amber', graphPath: 'M0,24 L10,23 L20,25 L30,22 L40,24 L50,18 L60,14 L70,11 L80,16 L90,18 L100,20' },
+      { title: 'Avg Delivery Delay', value: fv(km?.avg_delay_days, '', 'd'), sub: '↑ vs Baseline', icon: <Clock className="w-3.5 h-3.5" />, color: 'purple', graphPath: 'M0,26 L15,25 L30,27 L45,21 L60,23 L75,17 L90,19 L100,15' },
+      { title: 'Shipping Cost Index', value: fv(km?.shipping_cost_index), sub: '↑ vs Baseline', icon: <Ship className="w-3.5 h-3.5" />, color: 'blue', graphPath: 'M0,25 L10,23 L20,25 L30,20 L40,22 L50,18 L60,20 L70,12 L80,15 L90,8 L100,10' },
+      { title: 'Chokepoint Transit', value: km?.port_congestion_pct != null ? `-${Math.round(km.port_congestion_pct * 0.6)}%` : '--', sub: '↓ Throughput', icon: <Globe className="w-3.5 h-3.5" />, color: 'emerald', graphPath: 'M0,15 L15,14 L30,17 L45,15 L60,21 L75,19 L90,25 L100,24' },
       { title: 'Storage Drawdown', value: results?.impact?.storage_depletion != null ? `${results.impact.storage_depletion}%` : '--', sub: '↓ vs Baseline', icon: <DatabaseIcon />, color: 'emerald', graphPath: 'M0,26 L15,24 L30,25 L45,20 L60,22 L75,17 L90,19 L100,15' },
     ],
     'Market Impact': [
-      { title: 'Oil Price', value: km ? `$${km.oil_price_usd}` : '--', sub: `↑ ${km ? km.oil_price_pct : '--'}% /bbl`, icon: <DollarSign className="w-3.5 h-3.5" />, color: 'amber', graphPath: 'M0,25 L10,23 L20,25 L30,20 L40,22 L50,18 L60,20 L70,12 L80,15 L90,8 L100,10' },
-      { title: 'LNG Price', value: km ? `$${km.lng_price_usd}` : '--', sub: `↑ ${km ? km.lng_price_pct : '--'}% /MMBtu`, icon: <Flame className="w-3.5 h-3.5" />, color: 'red', graphPath: 'M0,25 L10,22 L20,24 L30,19 L40,21 L50,16 L60,18 L70,14 L80,17 L90,12 L100,15' },
-      { title: 'Volatility', value: km ? `${km.volatility_pct}%` : '--', sub: '↑ 30d Implied', icon: <BarChart2 className="w-3.5 h-3.5" />, color: 'purple', graphPath: 'M0,26 L15,25 L30,27 L45,21 L60,23 L75,17 L90,19 L100,15' },
-      { title: 'Price Impact', value: results ? `$${results.economic_impact?.impact?.price_impact}B` : '--', sub: '↑ vs Baseline', icon: <Zap className="w-3.5 h-3.5" />, color: 'blue', graphPath: 'M0,24 L10,23 L20,25 L30,22 L40,24 L50,18 L60,14 L70,11 L80,16 L90,18 L100,20' },
-      { title: 'Supply Shortage', value: results ? `$${results.economic_impact?.impact?.supply_shortage}B` : '--', sub: '↑ vs Baseline', icon: <ArrowDownCircle className="w-3.5 h-3.5" />, color: 'red', graphPath: 'M0,25 L10,22 L20,24 L30,19 L40,21 L50,16 L60,18 L70,14 L80,17 L90,12 L100,15' },
-      { title: 'Replacement Cost', value: results ? `$${results.economic_impact?.impact?.replacement_procurement}B` : '--', sub: 'Procurement', icon: <Building className="w-3.5 h-3.5" />, color: 'emerald', graphPath: 'M0,15 L15,14 L30,17 L45,15 L60,21 L75,19 L90,25 L100,24' },
+      { title: 'Oil Price', value: fv(km?.oil_price_usd, '$'), sub: km?.oil_price_pct != null ? `↑ ${km.oil_price_pct}% /bbl` : 'No live price model', icon: <DollarSign className="w-3.5 h-3.5" />, color: 'amber', graphPath: 'M0,25 L10,23 L20,25 L30,20 L40,22 L50,18 L60,20 L70,12 L80,15 L90,8 L100,10' },
+      { title: 'LNG Price', value: fv(km?.lng_price_usd, '$'), sub: km?.lng_price_pct != null ? `↑ ${km.lng_price_pct}% /MMBtu` : 'No live price model', icon: <Flame className="w-3.5 h-3.5" />, color: 'red', graphPath: 'M0,25 L10,22 L20,24 L30,19 L40,21 L50,16 L60,18 L70,14 L80,17 L90,12 L100,15' },
+      { title: 'Volatility', value: fv(km?.volatility_pct, '', '%'), sub: '↑ 30d Implied', icon: <BarChart2 className="w-3.5 h-3.5" />, color: 'purple', graphPath: 'M0,26 L15,25 L30,27 L45,21 L60,23 L75,17 L90,19 L100,15' },
+      { title: 'Price Impact', value: fv(results?.economic_impact?.impact?.price_impact, '$', 'B'), sub: '↑ vs Baseline', icon: <Zap className="w-3.5 h-3.5" />, color: 'blue', graphPath: 'M0,24 L10,23 L20,25 L30,22 L40,24 L50,18 L60,14 L70,11 L80,16 L90,18 L100,20' },
+      { title: 'Supply Shortage', value: fv(results?.economic_impact?.impact?.supply_shortage, '$', 'B'), sub: '↑ vs Baseline', icon: <ArrowDownCircle className="w-3.5 h-3.5" />, color: 'red', graphPath: 'M0,25 L10,22 L20,24 L30,19 L40,21 L50,16 L60,18 L70,14 L80,17 L90,12 L100,15' },
+      { title: 'Replacement Cost', value: fv(results?.economic_impact?.impact?.replacement_procurement, '$', 'B'), sub: 'Procurement', icon: <Building className="w-3.5 h-3.5" />, color: 'emerald', graphPath: 'M0,15 L15,14 L30,17 L45,15 L60,21 L75,19 L90,25 L100,24' },
     ],
     'Economic Impact': [
-      { title: 'Total Impact', value: results ? `$${results.economic_impact?.impact?.total}B` : '--', sub: 'P50 Estimate', icon: <Gauge className="w-3.5 h-3.5" />, color: 'red', graphPath: 'M0,25 L10,22 L20,24 L30,19 L40,21 L50,16 L60,18 L70,14 L80,17 L90,12 L100,15' },
-      { title: 'Supply Shortage', value: results ? `$${results.economic_impact?.impact?.supply_shortage}B` : '--', sub: '↑ vs Baseline', icon: <ArrowDownCircle className="w-3.5 h-3.5" />, color: 'blue', graphPath: 'M0,25 L10,23 L20,25 L30,20 L40,22 L50,18 L60,20 L70,12 L80,15 L90,8 L100,10' },
-      { title: 'Logistics', value: results ? `$${results.economic_impact?.impact?.logistics}B` : '--', sub: '↑ vs Baseline', icon: <Ship className="w-3.5 h-3.5" />, color: 'amber', graphPath: 'M0,24 L10,23 L20,25 L30,22 L40,24 L50,18 L60,14 L70,11 L80,16 L90,18 L100,20' },
-      { title: 'Reserve Impact', value: results ? `$${results.economic_impact?.impact?.reserve}B` : '--', sub: 'SPR Drawdown', icon: <DatabaseIcon />, color: 'emerald', graphPath: 'M0,26 L15,24 L30,25 L45,20 L60,22 L75,17 L90,19 L100,15' },
-      { title: 'P10 Range', value: results ? `$${results.economic_impact?.uncertainty?.p10}B` : '--', sub: '↓ Optimistic', icon: <BarChart2 className="w-3.5 h-3.5" />, color: 'emerald', graphPath: 'M0,15 L15,14 L30,17 L45,15 L60,21 L75,19 L90,25 L100,24' },
-      { title: 'P90 Range', value: results ? `$${results.economic_impact?.uncertainty?.p90}B` : '--', sub: '↑ Pessimistic', icon: <BarChart2 className="w-3.5 h-3.5" />, color: 'purple', graphPath: 'M0,26 L15,25 L30,27 L45,21 L60,23 L75,17 L90,19 L100,15' },
+      { title: 'Total Impact', value: fv(results?.economic_impact?.impact?.total, '$', 'B'), sub: 'P50 Estimate', icon: <Gauge className="w-3.5 h-3.5" />, color: 'red', graphPath: 'M0,25 L10,22 L20,24 L30,19 L40,21 L50,16 L60,18 L70,14 L80,17 L90,12 L100,15' },
+      { title: 'Supply Shortage', value: fv(results?.economic_impact?.impact?.supply_shortage, '$', 'B'), sub: '↑ vs Baseline', icon: <ArrowDownCircle className="w-3.5 h-3.5" />, color: 'blue', graphPath: 'M0,25 L10,23 L20,25 L30,20 L40,22 L50,18 L60,20 L70,12 L80,15 L90,8 L100,10' },
+      { title: 'Logistics', value: fv(results?.economic_impact?.impact?.logistics, '$', 'B'), sub: '↑ vs Baseline', icon: <Ship className="w-3.5 h-3.5" />, color: 'amber', graphPath: 'M0,24 L10,23 L20,25 L30,22 L40,24 L50,18 L60,14 L70,11 L80,16 L90,18 L100,20' },
+      { title: 'Reserve Impact', value: fv(results?.economic_impact?.impact?.reserve, '$', 'B'), sub: 'SPR Drawdown', icon: <DatabaseIcon />, color: 'emerald', graphPath: 'M0,26 L15,24 L30,25 L45,20 L60,22 L75,17 L90,19 L100,15' },
+      { title: 'P10 Range', value: fv(results?.economic_impact?.uncertainty?.p10, '$', 'B'), sub: '↓ Optimistic', icon: <BarChart2 className="w-3.5 h-3.5" />, color: 'emerald', graphPath: 'M0,15 L15,14 L30,17 L45,15 L60,21 L75,19 L90,25 L100,24' },
+      { title: 'P90 Range', value: fv(results?.economic_impact?.uncertainty?.p90, '$', 'B'), sub: '↑ Pessimistic', icon: <BarChart2 className="w-3.5 h-3.5" />, color: 'purple', graphPath: 'M0,26 L15,25 L30,27 L45,21 L60,23 L75,17 L90,19 L100,15' },
     ],
   };
 
   const keyMetrics = [
-    { label: 'Global Supply Gap', icon: <ArrowDownCircle size={16} />, iconCls: 'border-red-500/50 text-red-500 bg-red-950/30', pct: km ? `↑ ${km.supply_gap_pct}%` : '--', up: true, value: km ? `${km.supply_gap_mbd}` : '--', unit: 'Mb/d', spark: 'red' },
-    { label: 'Price Impact (Oil)', icon: <DollarSign size={16} />, iconCls: 'border-amber-500/50 text-amber-500 bg-amber-950/30', pct: km ? `↑ ${km.oil_price_pct}%` : '--', up: true, value: km ? `$${km.oil_price_usd}` : '--', unit: '/bbl', spark: 'red' },
-    { label: 'LNG Price Impact', icon: <Flame size={16} />, iconCls: 'border-orange-500/50 text-orange-500 bg-orange-950/30', pct: km ? `↑ ${km.lng_price_pct}%` : '--', up: true, value: km ? `$${km.lng_price_usd}` : '--', unit: '/MMBtu', spark: 'red' },
-    { label: 'Reserve Depletion (India)', icon: <Building size={16} />, iconCls: 'border-emerald-500/50 text-emerald-500 bg-emerald-950/30', pct: km ? `↑ ${km.reserve_depletion_pct}%` : '--', up: true, value: km ? `${km.reserve_depletion_days}` : '--', unit: 'Days', spark: 'green' },
-    { label: 'Shipping Cost Index', icon: <Ship size={16} />, iconCls: 'border-blue-500/50 text-blue-500 bg-blue-950/30', pct: km ? `↑ ${km.shipping_cost_pct}%` : '--', up: true, value: km ? `${km.shipping_cost_index}` : '--', unit: 'Index', spark: 'red' },
-    { label: 'Refinery Utilization (India)', icon: <Factory size={16} />, iconCls: 'border-slate-500/50 text-slate-400 bg-slate-800/30', pct: km ? `↓ ${km.refinery_utilization_delta_pct}%` : '--', up: false, value: km ? `${km.refinery_utilization_pct}` : '--', unit: '%', spark: 'green' },
+    { label: 'Global Supply Gap', icon: <ArrowDownCircle size={16} />, iconCls: 'border-red-500/50 text-red-500 bg-red-950/30', pct: km?.supply_gap_pct != null ? `↑ ${km.supply_gap_pct}%` : '--', up: true, value: fv(km?.supply_gap_mbd), unit: 'Mb/d', spark: 'red' },
+    { label: 'Price Impact (Oil)', icon: <DollarSign size={16} />, iconCls: 'border-amber-500/50 text-amber-500 bg-amber-950/30', pct: km?.oil_price_pct != null ? `↑ ${km.oil_price_pct}%` : '--', up: true, value: fv(km?.oil_price_usd, '$'), unit: '/bbl', spark: 'red' },
+    { label: 'LNG Price Impact', icon: <Flame size={16} />, iconCls: 'border-orange-500/50 text-orange-500 bg-orange-950/30', pct: km?.lng_price_pct != null ? `↑ ${km.lng_price_pct}%` : '--', up: true, value: fv(km?.lng_price_usd, '$'), unit: '/MMBtu', spark: 'red' },
+    { label: 'Reserve Depletion (India)', icon: <Building size={16} />, iconCls: 'border-emerald-500/50 text-emerald-500 bg-emerald-950/30', pct: km?.reserve_depletion_pct != null ? `↑ ${km.reserve_depletion_pct}%` : '--', up: true, value: fv(km?.reserve_depletion_days), unit: 'Days', spark: 'green' },
+    { label: 'Shipping Cost Index', icon: <Ship size={16} />, iconCls: 'border-blue-500/50 text-blue-500 bg-blue-950/30', pct: km?.shipping_cost_pct != null ? `↑ ${km.shipping_cost_pct}%` : '--', up: true, value: fv(km?.shipping_cost_index), unit: 'Index', spark: 'red' },
+    { label: 'Refinery Utilization (India)', icon: <Factory size={16} />, iconCls: 'border-slate-500/50 text-slate-400 bg-slate-800/30', pct: km?.refinery_utilization_delta_pct != null ? `↓ ${km.refinery_utilization_delta_pct}%` : '--', up: false, value: fv(km?.refinery_utilization_pct), unit: '%', spark: 'green' },
   ];
 
   return (
@@ -570,9 +597,14 @@ function ScenarioLabContent() {
                   </div>
                 )}
               </div>
-              <div className="mt-2 h-24 bg-[#0a1014] rounded-md border border-slate-700/80 flex items-center justify-center relative overflow-hidden">
-                 <img src="/target-map.png" alt="Target Map" className="w-full h-full object-cover opacity-80" />
-                 <div className="absolute bottom-1 right-1.5 flex items-center gap-1 bg-red-950/80 border border-red-900 rounded px-1.5 py-0.5 text-[9px] font-bold text-red-300">
+              <div className="mt-2 h-24 bg-[#0a1014] rounded-md border border-slate-700/80 relative overflow-hidden">
+                 <TargetMiniMap
+                   target={targetEntity}
+                   targetId={targetId}
+                   previewRisk={targetPreviewRisk}
+                   isPreview={previewShown}
+                 />
+                 <div className="absolute bottom-1 right-1.5 z-10 flex items-center gap-1 bg-red-950/80 border border-red-900 rounded px-1.5 py-0.5 text-[9px] font-bold text-red-300">
                    <MapPin size={9} /> {targetId}
                  </div>
               </div>
@@ -749,16 +781,16 @@ function ScenarioLabContent() {
                           <YAxis tick={{fontSize: 9, fill: '#64748b'}} stroke="#334155" />
                           <Tooltip contentStyle={{backgroundColor: '#0f172a', border: '1px solid #1e293b', fontSize: '10px'}} />
                           <Area type="monotone" dataKey="probability" stroke="#3b82f6" fillOpacity={1} fill="url(#colorProb)" />
-                          <ReferenceLine x={results.monte_carlo.p10_gap} stroke="#10b981" strokeDasharray="3 3" label={{ position: 'top', value: 'P10', fill: '#10b981', fontSize: 9 }} />
-                          <ReferenceLine x={results.monte_carlo.p50_gap} stroke="#f59e0b" strokeDasharray="3 3" label={{ position: 'top', value: 'P50', fill: '#f59e0b', fontSize: 9 }} />
-                          <ReferenceLine x={results.monte_carlo.p90_gap} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'top', value: 'P90', fill: '#ef4444', fontSize: 9 }} />
+                          {mcData.length > 0 && <ReferenceLine x={results.monte_carlo.p10_gap} stroke="#10b981" strokeDasharray="3 3" label={{ position: 'top', value: 'P10', fill: '#10b981', fontSize: 9 }} />}
+                          {mcData.length > 0 && <ReferenceLine x={results.monte_carlo.p50_gap} stroke="#f59e0b" strokeDasharray="3 3" label={{ position: 'top', value: 'P50', fill: '#f59e0b', fontSize: 9 }} />}
+                          {mcData.length > 0 && <ReferenceLine x={results.monte_carlo.p90_gap} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'top', value: 'P90', fill: '#ef4444', fontSize: 9 }} />}
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
                     <div className="w-32 flex flex-col justify-center gap-3 pl-2 text-xs font-bold">
-                       <div className="flex justify-between"><span className="text-slate-400">Expected (P50)</span><span className="text-slate-200">{results.monte_carlo.p50_gap}M</span></div>
-                       <div className="flex justify-between"><span className="text-emerald-400">P10 (Optimistic)</span><span className="text-emerald-400">{results.monte_carlo.p10_gap}M</span></div>
-                       <div className="flex justify-between"><span className="text-red-400">P90 (Pessimistic)</span><span className="text-red-400">{results.monte_carlo.p90_gap}M</span></div>
+                       <div className="flex justify-between"><span className="text-slate-400">Expected (P50)</span><span className="text-slate-200">{fv(results.monte_carlo.p50_gap, '', 'M')}</span></div>
+                       <div className="flex justify-between"><span className="text-emerald-400">P10 (Optimistic)</span><span className="text-emerald-400">{fv(results.monte_carlo.p10_gap, '', 'M')}</span></div>
+                       <div className="flex justify-between"><span className="text-red-400">P90 (Pessimistic)</span><span className="text-red-400">{fv(results.monte_carlo.p90_gap, '', 'M')}</span></div>
                        <div className="border-t border-slate-700 mt-2 pt-2 flex justify-between">
                          <span className="text-slate-400 text-[10px]">Simulations Run</span>
                          <span className="text-slate-200 text-[10px]">{results.uncertainty?.sample_count || 'UNAVAILABLE'}</span>
@@ -860,7 +892,9 @@ function ScenarioLabContent() {
           <div className="bg-[#0f171b] rounded-md border border-slate-700/50 p-4 flex flex-col gap-3">
              <h3 className="text-[11px] font-black tracking-wider text-slate-300 uppercase mb-1">Affected Volumes <span className="normal-case text-slate-500 font-bold">({duration} Days)</span></h3>
 
-             {results ? (
+             {results && !results.affected_volumes ? (
+               <div className="text-[11px] text-slate-500 py-4 text-center">The live job result does not include a per-commodity volume breakdown</div>
+             ) : results ? (
                <table className="w-full text-left text-[11px]">
                  <thead>
                    <tr className="text-slate-500 border-b border-slate-700/50">
@@ -911,11 +945,6 @@ function ScenarioLabContent() {
                {results && runMode === 'sync_fallback' && (
                  <span className="ml-2 rounded border border-amber-500/80 bg-amber-950/80 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-amber-300">
                    INLINE RUN, JOB QUEUE DOWN
-                 </span>
-               )}
-               {results && runMode === 'live' && results.presentation_model && (
-                 <span className="ml-2 rounded border border-amber-500/80 bg-amber-950/80 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-amber-300">
-                   MODELED ESTIMATE, TARGET NOT IN LIVE GRAPH
                  </span>
                )}
              </div>
@@ -1042,21 +1071,21 @@ const CascadeArrow = () => (
 
 const CascadeFlow = ({ eventType, severity, km, ind }: {
   eventType: string; severity: number;
-  km?: { oil_price_pct: number; refinery_utilization_delta_pct: number; avg_delay_days: number } | null;
-  ind?: { gdp_pct: number } | null;
+  km?: { oil_price_pct: number | null; refinery_utilization_delta_pct: number | null; avg_delay_days: number | null } | null;
+  ind?: { gdp_pct: number | null } | null;
 }) => (
   <div className="flex items-center justify-between w-full h-full overflow-x-auto no-scrollbar">
     <CascadeStage icon={<Activity size={14} />} ring="border-red-500/50 bg-red-950/20 text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.5)]" title="Event Trigger" sub={eventType} />
     <CascadeArrow />
     <CascadeStage icon={<Zap size={14} />} ring="border-amber-500/50 bg-amber-950/20 text-amber-500 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]" title="Supply Shock" sub={`-${Math.round(severity * 100)}% Capacity`} />
     <CascadeArrow />
-    <CascadeStage icon={<Anchor size={14} />} ring="border-amber-500/50 bg-amber-950/20 text-amber-500 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]" title="Shipping Impact" sub={km ? `+${km.avg_delay_days}d Delays` : 'Delays & Rerouting'} />
+    <CascadeStage icon={<Anchor size={14} />} ring="border-amber-500/50 bg-amber-950/20 text-amber-500 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]" title="Shipping Impact" sub={km?.avg_delay_days != null ? `+${km.avg_delay_days}d Delays` : 'Delays & Rerouting'} />
     <CascadeArrow />
-    <CascadeStage icon={<MapPin size={14} />} ring="border-emerald-500/50 bg-emerald-950/20 text-emerald-500 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]" title="Port & Refinery" sub={km ? `-${km.refinery_utilization_delta_pct}% Utilization` : 'Utilization Drop'} />
+    <CascadeStage icon={<MapPin size={14} />} ring="border-emerald-500/50 bg-emerald-950/20 text-emerald-500 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]" title="Port & Refinery" sub={km?.refinery_utilization_delta_pct != null ? `-${km.refinery_utilization_delta_pct}% Utilization` : 'Utilization Drop'} />
     <CascadeArrow />
-    <CascadeStage icon={<BarChart2 size={14} />} ring="border-purple-500/50 bg-purple-950/20 text-purple-500 drop-shadow-[0_0_5px_rgba(168,85,247,0.5)]" title="Market Impact" sub={km ? `+${km.oil_price_pct}% Prices` : 'Price Increase'} />
+    <CascadeStage icon={<BarChart2 size={14} />} ring="border-purple-500/50 bg-purple-950/20 text-purple-500 drop-shadow-[0_0_5px_rgba(168,85,247,0.5)]" title="Market Impact" sub={km?.oil_price_pct != null ? `+${km.oil_price_pct}% Prices` : 'Price Increase'} />
     <CascadeArrow />
-    <CascadeStage icon={<Gauge size={14} />} ring="border-red-500/50 bg-red-950/20 text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.5)]" title="Economic Impact" sub={ind ? `-${ind.gdp_pct}% GDP` : 'Inflation & GDP'} />
+    <CascadeStage icon={<Gauge size={14} />} ring="border-red-500/50 bg-red-950/20 text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.5)]" title="Economic Impact" sub={ind?.gdp_pct != null ? `-${ind.gdp_pct}% GDP` : 'Inflation & GDP'} />
   </div>
 );
 
