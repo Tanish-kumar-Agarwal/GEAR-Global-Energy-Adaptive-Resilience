@@ -83,17 +83,8 @@ function snapshotResponse(endpoint: string, options?: RequestInit): unknown {
       ],
     };
   }
-  if (endpoint.startsWith('/market/prices')) {
-    return {
-      status: 'ok',
-      prices: [
-        { name: 'Brent Crude', price: 64.82, change_pct: 2.35 },
-        { name: 'WTI Crude', price: 61.47, change_pct: 2.18 },
-        { name: 'LNG (JKM)', price: 12.34, change_pct: 1.92 },
-        { name: 'Coal (API2)', price: 104.6, change_pct: -0.45 },
-      ],
-    };
-  }
+  // Real values captured from the EIA API; see HACKATHON_MARKET_PRICES.
+  if (endpoint.startsWith('/market/prices')) return snapshot.HACKATHON_MARKET_PRICES;
   if (endpoint.startsWith('/market/reserve-coverage')) {
     return { status: 'ok', countries: [{ country_id: 'IND', status: 'ok', coverage_days: 9.8, target_days: 90 }] };
   }

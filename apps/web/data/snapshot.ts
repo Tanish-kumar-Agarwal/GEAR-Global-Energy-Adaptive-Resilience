@@ -310,6 +310,27 @@ export const HACKATHON_MAP_ASSETS: MapAsset[] = [
   { id: 'AST_OKINAWA', name: 'Okinawa Storage', type: 'STORAGE', lat: 26.3, lng: 127.7, capacity: 5 },
 ];
 
+// -----------------------------------------------------------------------------
+// MARKET PRICES - REAL VALUES, captured from the EIA API v2 (api.eia.gov) on
+// 2026-08-22. Series: RBRTE (Europe Brent spot FOB, $/bbl), RWTC (Cushing WTI
+// spot, $/bbl), RNGWHHD (Henry Hub natural gas spot, $/MMBtu),
+// EER_EPD2DXL0_PF4_Y35NY_DPG (NY Harbor ULSD diesel spot, $/gal). Latest
+// trading day in the feed was 2026-08-18; change_pct is vs the prior trading
+// day. Static once captured: a snapshot build shows these as of the capture
+// date, it does not refetch.
+// -----------------------------------------------------------------------------
+export const HACKATHON_MARKET_PRICES = {
+  status: 'ok',
+  as_of: '2026-08-18',
+  captured: '2026-08-22',
+  prices: [
+    { name: 'Brent Crude', price: 95.29, change_pct: 3.09 },
+    { name: 'WTI Crude', price: 86.48, change_pct: 0.51 },
+    { name: 'Henry Hub Gas', price: 2.82, change_pct: 1.81 },
+    { name: 'Diesel (NYH)', price: 4.55, change_pct: 0.4 },
+  ],
+};
+
 export const HACKATHON_SUPPLY_BALANCE = [
   { date: 'May 18', Supply: 112, Demand: 76, AtRisk: 42 },
   { date: 'May 19', Supply: 110, Demand: 74, AtRisk: 44 },
