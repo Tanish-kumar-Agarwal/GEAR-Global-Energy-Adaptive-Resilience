@@ -530,3 +530,121 @@ export const HACKATHON_OPTIMIZATION_RESULT = {
     "methodology": "OR-Tools GLOP optimization minimizing physical unmet demand."
   }
 };
+
+// -----------------------------------------------------------------------------
+// PAGE 5 DEMO TELEMETRY (Data Intelligence & System Health)
+//
+// DEMO DATA, NOT MEASURED. The backend has no ingestion/pipeline telemetry at
+// all (no /intelligence/data-sources, no pipeline, quality, or host-metric
+// endpoints; verified 404). Everything below is an invented but internally
+// consistent operations story, rendered ONLY in HACKATHON_SNAPSHOT builds
+// where the global DEMO DATA badge discloses it. LIVE mode must never show
+// these numbers; the page renders explicit unavailable states instead.
+//
+// The story (all panels agree on it): morning of 2026-08-22 UTC. The World
+// Bank feed has been down since 2026-08-19, ACLED and Comtrade are lagging,
+// the other five sources are green.
+//
+// Consistency ledger, audited by hand:
+//   pipelines per source 4+4+3+4+3+2+2+2            = 24 total
+//   health 19 healthy + 3 warning + 2 critical      = 24
+//   runs last 24h: 284 of 288 succeeded             = 98.6% success, 4 failed
+//   failure breakdown 2 timeouts + 1 validation
+//     + 1 processing + 0 unknown                    = 4 failed runs
+//   ingested/day = sum of per-source records/day    = 11.13M
+//   processed last 24h                              = 10.98M (98.6% of 11.13M)
+//   hourly ingestion series sums to 11,130K; processed = ingested * 0.986
+//   quality 87 = mean(completeness 92, validity 94, freshness 76, consistency 86)
+//   top-5 pipeline volumes each <= their source's records/day
+// -----------------------------------------------------------------------------
+
+export interface DemoIngestionSource {
+  name: string;
+  status: 'OK (Green)' | 'Lagging' | 'Error';
+  lastSync: string;      // UTC, fixed demo timestamp
+  recordsPerDay: number; // records ingested per day
+  reliability: number;   // 0-100, 30-day fetch reliability
+  pipelines: number;
+}
+
+export const HACKATHON_INGESTION_SOURCES: DemoIngestionSource[] = [
+  { name: 'EIA', status: 'OK (Green)', lastSync: '2026-08-22 09:47:12', recordsPerDay: 2_840_000, reliability: 98, pipelines: 4 },
+  { name: 'GDELT', status: 'OK (Green)', lastSync: '2026-08-22 09:52:30', recordsPerDay: 2_310_000, reliability: 96, pipelines: 4 },
+  { name: 'Open-Meteo', status: 'OK (Green)', lastSync: '2026-08-22 09:55:04', recordsPerDay: 1_920_000, reliability: 95, pipelines: 3 },
+  { name: 'IEA (Baseline)', status: 'OK (Green)', lastSync: '2026-08-22 08:15:41', recordsPerDay: 1_780_000, reliability: 97, pipelines: 4 },
+  { name: 'GEM', status: 'OK (Green)', lastSync: '2026-08-22 09:20:18', recordsPerDay: 1_140_000, reliability: 94, pipelines: 3 },
+  { name: 'Comtrade', status: 'Lagging', lastSync: '2026-08-22 01:12:09', recordsPerDay: 615_000, reliability: 88, pipelines: 2 },
+  { name: 'ACLED', status: 'Lagging', lastSync: '2026-08-22 03:41:56', recordsPerDay: 528_000, reliability: 86, pipelines: 2 },
+  { name: 'World Bank', status: 'Error', lastSync: '2026-08-19 22:23:35', recordsPerDay: 0, reliability: 41, pipelines: 2 },
+];
+
+export const HACKATHON_PIPELINE_OVERVIEW = {
+  totalPipelines: 24,
+  runsLast24h: 288,
+  succeededLast24h: 284,
+  successRatePct: 98.6,
+  failedRunsLast24h: 4,
+  avgIngestionLatencyMin: 12.4,
+  avgProcessingTimeSec: 18.7,
+  recordsProcessedLast24h: 10_980_000,
+};
+
+export const HACKATHON_PIPELINE_HEALTH = [
+  { name: 'Healthy', value: 19, color: '#10b981' },
+  { name: 'Warning', value: 3, color: '#f59e0b' },
+  { name: 'Critical', value: 2, color: '#ef4444' },
+];
+
+export const HACKATHON_FAILURE_BREAKDOWN = [
+  { name: 'Source Timeout', value: 2, fill: '#ef4444' },
+  { name: 'Data Validation', value: 1, fill: '#f59e0b' },
+  { name: 'Processing Error', value: 1, fill: '#f59e0b' },
+  { name: 'Unknown', value: 0, fill: '#475569' },
+];
+
+// Hourly ingestion, records per hour across 2026-08-21 10:00 -> 2026-08-22
+// 10:00 UTC. The 24 ingested values sum to 11,130K (= 11.13M/day above).
+const HOURLY_INGESTED_K = [
+  310, 295, 300, 320, 340, 365, 405, 450, 500, 545, 580, 610,
+  635, 660, 680, 655, 610, 555, 495, 440, 395, 360, 335, 290,
+];
+
+export const HACKATHON_INGESTION_VOLUME_24H = HOURLY_INGESTED_K.map((k, i) => ({
+  hour: `${String(i).padStart(2, '0')}:00`,
+  ingested: k * 1000,
+  processed: Math.round(k * 0.986) * 1000,
+}));
+
+export const HACKATHON_DATA_QUALITY = {
+  score: 87, // mean of the four components below
+  band: 'Good',
+  components: [
+    { name: 'Completeness', value: 92 },
+    { name: 'Validity', value: 94 },
+    { name: 'Freshness', value: 76 }, // dragged down by ACLED, Comtrade, World Bank
+    { name: 'Consistency', value: 86 },
+  ],
+};
+
+export const HACKATHON_TOP_PIPELINES = [
+  { name: 'EIA - Petroleum bulk', volume: 1_620_000 },
+  { name: 'GDELT - Events', volume: 1_310_000 },
+  { name: 'Open-Meteo - Forecast grid', volume: 1_120_000 },
+  { name: 'EIA - Electricity', volume: 980_000 },
+  { name: 'IEA - Monthly balances', volume: 940_000 },
+];
+
+export const HACKATHON_PIPELINE_ALERTS = [
+  { time: '2026-08-22 09:58:41', pipeline: 'Open-Meteo - Forecast grid', severity: 'Warning', event: 'Processing Error', details: 'Run OM-1422 failed in transform stage; retry queued' },
+  { time: '2026-08-22 09:45:00', pipeline: 'ACLED - Events', severity: 'Warning', event: 'Validation Failed', details: '214 rows failed schema validation; batch quarantined, feed 6h behind' },
+  { time: '2026-08-22 01:30:12', pipeline: 'Comtrade - Tariff lines', severity: 'Warning', event: 'Data Delayed', details: 'Monthly tariff batch 9h behind schedule' },
+  { time: '2026-08-20 06:15:00', pipeline: 'World Bank - WDI', severity: 'Critical', event: 'Source Timeout', details: 'Retry window exhausted after 8 attempts' },
+  { time: '2026-08-19 22:23:35', pipeline: 'World Bank - WDI', severity: 'Critical', event: 'Connection Failed', details: 'Unable to reach api.worldbank.org; TLS handshake timeout' },
+];
+
+// Fixed 12-point sparklines; values hover around the stated utilization.
+export const HACKATHON_SYSTEM_RESOURCES = [
+  { name: 'CPU Usage', pct: 42, spark: [38, 41, 44, 40, 39, 43, 46, 42, 40, 44, 41, 42] },
+  { name: 'Memory Usage', pct: 68, spark: [64, 65, 67, 66, 68, 70, 69, 68, 67, 69, 68, 68] },
+  { name: 'Disk I/O', pct: 53, spark: [48, 51, 55, 60, 52, 49, 54, 57, 51, 50, 53, 53] },
+];
