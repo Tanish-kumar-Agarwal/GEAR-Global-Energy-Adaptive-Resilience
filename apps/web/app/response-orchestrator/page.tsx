@@ -800,3 +800,4 @@ function BottomOutcome({ value, label, color }: any) {
       </div>
    );
 }
+
