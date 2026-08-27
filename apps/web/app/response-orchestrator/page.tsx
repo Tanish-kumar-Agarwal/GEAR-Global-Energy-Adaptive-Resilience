@@ -27,6 +27,26 @@ const EVENT_TARGETS: Record<string, { targetId: string; region: string }> = {
   'Suez Canal Closure': { targetId: 'CHK_SUEZ', region: 'Middle East' },
 };
 
+// Shape shared by API-provided options (MasterResponseObject['options']) and
+// the static fallback below; icon/alternatives only exist on the fallback.
+interface ResponseOptionAlternative {
+  title: string;
+  cost: string;
+  time: string;
+  risk: string;
+}
+
+interface ResponseOption {
+  option_id?: string;
+  option_type: string;
+  name: string;
+  description: string;
+  expected_effect: Record<string, unknown>;
+  feasibility?: string;
+  icon?: React.ReactNode;
+  alternatives?: ResponseOptionAlternative[];
+}
+
 function severityLabel(s: number): { text: string; cls: string } {
   if (s < 0.4) return { text: '(LOW)', cls: 'text-emerald-500 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]' };
   if (s < 0.75) return { text: '(MODERATE)', cls: 'text-amber-500 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]' };
@@ -142,7 +162,7 @@ function ResponseOrchestratorContent() {
   const optShortage = responseObj?.recommendation?.expected_physical_impact?.shortage || 8.2;
 
   // Use API options if available, else use exact fallback from the image for UI testing if empty
-  const options = responseObj?.options?.length ? responseObj.options : [
+  const options: ResponseOption[] = responseObj?.options?.length ? responseObj.options : [
     {
       name: "Diversify Procurement from Supplier A",
       option_type: "Procurement",

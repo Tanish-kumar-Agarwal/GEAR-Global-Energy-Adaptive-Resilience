@@ -9,6 +9,7 @@ import {
   RouteStatus,
   HACKATHON_SUPPLY_ROUTES,
   HACKATHON_CHOKEPOINTS,
+  buildHackathonScenarioResults,
 } from '@/data/snapshot';
 
 // ---------------------------------------------------------------------------
