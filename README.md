@@ -317,8 +317,12 @@ Install Docker with Compose support, Python 3.12, Node.js 18 or newer, and npm. 
 Copy the example configuration into the repository root:
 
 ```bash
-cp .env.example .env
+cp .env.example .env   # then fill in real values
 ```
+
+The `.env` file is **gitignored and must never be committed**. Required variables (see `.env.example` for details and local-dev defaults): `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`, `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `JWT_SECRET_KEY`, and `EIA_API_KEY`. Optional: `CELERY_TASK_QUEUE`, `NEXT_PUBLIC_GEAR_DATA_MODE`.
+
+> **Incident note:** a `.env` file containing real values for `POSTGRES_PASSWORD`, `NEO4J_PASSWORD`, `EIA_API_KEY`, and `JWT_SECRET_KEY` was previously committed to this public repository and remains in git history. Treat every one of those values as compromised: rotate the EIA API key, generate a new `JWT_SECRET_KEY`, and change any non-local database passwords. Removing the file from the current tree does not remove it from history.
 
 The local Compose defaults use the following services:
 
