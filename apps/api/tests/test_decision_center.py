@@ -16,8 +16,9 @@ def teardown_module(module):
 def test_decision_center_flow():
     db = SessionLocal()
     # Create test scenario
-    test_scenario_id = str(uuid.uuid4())
-    scenario = Scenario(id=test_scenario_id, name="Test Scenario")
+    test_scenario_uuid = uuid.uuid4()
+    test_scenario_id = str(test_scenario_uuid)
+    scenario = Scenario(id=test_scenario_uuid, name="Test Scenario")
     db.add(scenario)
     db.commit()
     db.close()
@@ -48,8 +49,9 @@ def test_decision_center_flow():
 
 def test_transactional_guarantee(monkeypatch):
     db = SessionLocal()
-    test_scenario_id = str(uuid.uuid4())
-    scenario = Scenario(id=test_scenario_id, name="Test Scenario 2")
+    test_scenario_uuid = uuid.uuid4()
+    test_scenario_id = str(test_scenario_uuid)
+    scenario = Scenario(id=test_scenario_uuid, name="Test Scenario 2")
     db.add(scenario)
     db.commit()
     db.close()

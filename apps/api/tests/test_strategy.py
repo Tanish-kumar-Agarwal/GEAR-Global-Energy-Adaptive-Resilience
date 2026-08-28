@@ -10,7 +10,7 @@ def setup_module(module):
     Base.metadata.create_all(bind=engine)
 
 def teardown_module(module):
-    Base.metadata.drop_all(bind=engine)
+    pass
 
 def test_create_strategy_scenario():
     response = client.post(
@@ -27,8 +27,9 @@ def test_create_strategy_scenario():
     assert data["status"] == "QUEUED"
 
     # Verify it exists in db
+    import uuid
     db = SessionLocal()
-    strat = db.query(StrategyScenario).filter(StrategyScenario.id == data["strategy_id"]).first()
+    strat = db.query(StrategyScenario).filter(StrategyScenario.id == uuid.UUID(data["strategy_id"])).first()
     assert strat is not None
     assert strat.name == "Test Diversification"
     db.close()

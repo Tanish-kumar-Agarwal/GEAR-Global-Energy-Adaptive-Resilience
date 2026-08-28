@@ -4,6 +4,7 @@ import { ApiClient } from '@/lib/api';
 import { 
   RiskTrendPoint, 
   RiskExposureResponse, 
+  RiskExposureEntity,
   IntelligenceEvent, 
   RiskEvaluationResponse,
   ExplainabilityResponse
@@ -163,7 +164,7 @@ export function RiskExposures({ entityId }: { entityId: string }) {
         <div>
           <span className="text-[10px] uppercase text-slate-500 font-bold block mb-1">Dependent Countries</span>
           <div className="flex flex-wrap gap-1">
-            {data.dependent_countries.map((c: any) => (
+            {data.dependent_countries.map((c: RiskExposureEntity) => (
               <span key={c.id} className="bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded text-[10px]">{c.name}</span>
             ))}
           </div>
@@ -174,7 +175,7 @@ export function RiskExposures({ entityId }: { entityId: string }) {
         <div className="mt-2">
           <span className="text-[10px] uppercase text-slate-500 font-bold block mb-1">Exposed Suppliers</span>
           <div className="flex flex-wrap gap-1">
-            {data.exposed_suppliers.map((c: any) => (
+            {data.exposed_suppliers.map((c: RiskExposureEntity) => (
               <span key={c.id} className="bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded text-[10px]">{c.name}</span>
             ))}
           </div>
@@ -185,7 +186,7 @@ export function RiskExposures({ entityId }: { entityId: string }) {
         <div className="mt-2">
           <span className="text-[10px] uppercase text-slate-500 font-bold block mb-1">Routes Affected</span>
           <div className="flex flex-wrap gap-1">
-            {data.routes_affected.map((c: any) => (
+            {data.routes_affected.map((c: RiskExposureEntity) => (
               <span key={c.id} className="bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded text-[10px] text-amber-200">{c.name}</span>
             ))}
           </div>
@@ -196,7 +197,7 @@ export function RiskExposures({ entityId }: { entityId: string }) {
         <div className="mt-2">
           <span className="text-[10px] uppercase text-slate-500 font-bold block mb-1">Downstream Assets</span>
           <div className="flex flex-wrap gap-1">
-            {data.downstream_assets.map((c: any) => (
+            {data.downstream_assets.map((c: RiskExposureEntity) => (
               <span key={c.id} className="bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded text-[10px] text-emerald-200">{c.name}</span>
             ))}
           </div>

@@ -133,7 +133,7 @@ function ResponseOrchestratorContent() {
   const approvePlan = async () => {
     if (!responseObj?.decision_audit?.decision_id) return;
     setApproving(true);
-    await ApiClient.approveDecision(responseObj.decision_audit.decision_id);
+    await ApiClient.approveDecision(String(responseObj.decision_audit.decision_id));
     const updated = await ApiClient.getMasterResponse(scenarioId!);
     setResponseObj(updated);
     setApproving(false);
@@ -389,11 +389,11 @@ function ResponseOrchestratorContent() {
               
               <div className="relative flex-1">
                  <div className="absolute inset-0 overflow-y-auto pr-2 space-y-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[#0f172a] [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-emerald-500 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-emerald-400">
-                    {options.map((opt: any, idx: number) => (
+                    {options.map((opt: { name?: string; title?: string; option_type: string; description: string; expected_effect?: { impact?: string; time?: string; reduction?: string }; icon?: React.ReactNode; alternatives?: Array<{ title: string; cost: string; time: string; risk: string }> }, idx: number) => (
                        <ActionCard 
                           key={idx}
                           num={String(idx + 1).padStart(2, '0')}
-                          title={opt.name || opt.title}
+                          title={opt.name || opt.title || 'Action'}
                           tag={opt.option_type}
                           desc={opt.description}
                           impact={opt.expected_effect?.impact || "HIGH"}
@@ -694,7 +694,15 @@ export default function ResponseOrchestrator() {
 }
 
 // Helpers
-function TopKpi({ label, value, sub, color, dropShadow }: any) {
+interface TopKpiProps {
+   label: string;
+   value: string | number;
+   sub: string;
+   color: string;
+   dropShadow?: string;
+}
+
+function TopKpi({ label, value, sub, color, dropShadow }: TopKpiProps) {
    return (
       <div className="flex flex-col gap-0.5 items-start">
          <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest whitespace-nowrap">{label}</span>
@@ -704,7 +712,20 @@ function TopKpi({ label, value, sub, color, dropShadow }: any) {
    );
 }
 
-function ActionCard({ num, title, tag, desc, impact, time, reduction, icon, alternatives, forceExpand }: any) {
+interface ActionCardProps {
+   num: number | string;
+   title: string;
+   tag: string;
+   desc: string;
+   impact: 'HIGH' | 'MEDIUM' | 'LOW' | string;
+   time: string;
+   reduction: string;
+   icon?: React.ReactNode;
+   alternatives?: Array<{ title: string; cost: string; time: string; risk: string }>;
+   forceExpand?: boolean;
+}
+
+function ActionCard({ num, title, tag, desc, impact, time, reduction, alternatives, forceExpand }: ActionCardProps) {
    const [expanded, setExpanded] = useState(false);
    let tagColor = "bg-emerald-900/50 text-emerald-400 border-emerald-800";
    if (tag === 'Logistics') tagColor = "bg-orange-900/50 text-orange-400 border-orange-800";
@@ -756,7 +777,7 @@ function ActionCard({ num, title, tag, desc, impact, time, reduction, icon, alte
                      <td className="py-1.5 text-center">{time}</td>
                      <td className="py-1.5 text-right text-emerald-400">Low</td>
                    </tr>
-                   {alternatives.map((alt: any, i: number) => (
+                   {alternatives.map((alt, i) => (
                       <tr key={i} className="border-b border-slate-800/50 last:border-0">
                          <td className="py-1.5 flex items-center gap-1 text-slate-400"><div className="w-1.5 h-1.5 rounded-full bg-slate-600"></div> {alt.title}</td>
                          <td className="py-1.5 text-center text-amber-400">{alt.cost}</td>
@@ -772,7 +793,15 @@ function ActionCard({ num, title, tag, desc, impact, time, reduction, icon, alte
    );
 }
 
-function RightMetric({ label, value, trend, color, icon }: any) {
+interface RightMetricProps {
+  label: string;
+  value: string | number;
+  trend: string;
+  color: string;
+  icon: React.ReactNode;
+}
+
+function RightMetric({ label, value, trend, color, icon }: RightMetricProps) {
   return (
     <div className="flex justify-between items-center border-b border-slate-800/50 pb-2 last:border-0 last:pb-0">
       <div className="flex items-center gap-2">
@@ -789,7 +818,13 @@ function RightMetric({ label, value, trend, color, icon }: any) {
   );
 }
 
-function EconMetric({ label, trend, color }: any) {
+interface EconMetricProps {
+  label: string;
+  trend: string;
+  color: string;
+}
+
+function EconMetric({ label, trend, color }: EconMetricProps) {
   return (
     <div className="flex justify-between items-center py-1">
       <span className="text-[10px] text-slate-300">{label}</span>
@@ -798,7 +833,15 @@ function EconMetric({ label, trend, color }: any) {
   );
 }
 
-function Milestone({ time, label, desc, desc2, active }: any) {
+interface MilestoneProps {
+  time: string;
+  label: string;
+  desc: string;
+  desc2?: string;
+  active?: boolean;
+}
+
+function Milestone({ time, label, desc, desc2, active }: MilestoneProps) {
    return (
       <div className="flex flex-col items-center w-20 group">
          <div className="text-[10px] font-bold text-slate-300 mb-1">{time}</div>
@@ -812,7 +855,13 @@ function Milestone({ time, label, desc, desc2, active }: any) {
    );
 }
 
-function BottomOutcome({ value, label, color }: any) {
+interface BottomOutcomeProps {
+  value: string | number;
+  label: string;
+  color: string;
+}
+
+function BottomOutcome({ value, label, color }: BottomOutcomeProps) {
    return (
       <div className="flex flex-col">
          <span className={`text-lg font-bold ${color} leading-none`}>{value}</span>

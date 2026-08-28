@@ -13,11 +13,20 @@ class IntelligenceService:
         return events, total
         
     def get_event(self, event_id: str) -> Optional[GeopoliticalEvent]:
-        return self.db.query(GeopoliticalEvent).filter(GeopoliticalEvent.id == event_id).first()
+        import uuid
+        try:
+            event_uuid = uuid.UUID(event_id) if isinstance(event_id, str) else event_id
+            return self.db.query(GeopoliticalEvent).filter(GeopoliticalEvent.id == event_uuid).first()
+        except (ValueError, AttributeError):
+            return self.db.query(GeopoliticalEvent).filter(GeopoliticalEvent.source_event_id == event_id).first()
         
-    def get_explainability(self, risk_score_id: str) -> ExplainabilityResponse:
-        # Example logic for deterministic explainability based on the model
-        risk = self.db.query(RiskScore).filter(RiskScore.id == risk_score_id).first()
+    def get_explainability(self, risk_score_id: str) -> Optional[ExplainabilityResponse]:
+        import uuid
+        try:
+            risk_uuid = uuid.UUID(risk_score_id) if isinstance(risk_score_id, str) else risk_score_id
+            risk = self.db.query(RiskScore).filter(RiskScore.id == risk_uuid).first()
+        except (ValueError, AttributeError):
+            risk = self.db.query(RiskScore).filter(RiskScore.entity_id == risk_score_id).first()
         if not risk:
             return None
             

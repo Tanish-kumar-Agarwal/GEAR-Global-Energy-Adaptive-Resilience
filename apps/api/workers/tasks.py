@@ -17,7 +17,11 @@ logger = logging.getLogger(__name__)
 def execute_scenario_simulation(self, job_id: str, target_id: str, severity: float, duration_days: int = 30):
     set_correlation_id(job_id)
     db = SessionLocal()
-    job = db.query(Job).filter(Job.id == job_id).first()
+    try:
+        job_uuid = uuid.UUID(job_id) if isinstance(job_id, str) else job_id
+    except (ValueError, AttributeError):
+        job_uuid = job_id
+    job = db.query(Job).filter(Job.id == job_uuid).first()
     if not job:
         db.close()
         return "Job not found"
@@ -93,12 +97,20 @@ def execute_scenario_simulation(self, job_id: str, target_id: str, severity: flo
 def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_id: str):
     set_correlation_id(optimization_job_id)
     db = SessionLocal()
-    opt_job = db.query(Job).filter(Job.id == optimization_job_id).first()
+    try:
+        opt_uuid = uuid.UUID(optimization_job_id) if isinstance(optimization_job_id, str) else optimization_job_id
+    except (ValueError, AttributeError):
+        opt_uuid = optimization_job_id
+    opt_job = db.query(Job).filter(Job.id == opt_uuid).first()
     if not opt_job:
         db.close()
         return "Optimization Job not found"
         
-    scenario_job = db.query(Job).filter(Job.id == scenario_job_id).first()
+    try:
+        scen_job_uuid = uuid.UUID(scenario_job_id) if isinstance(scenario_job_id, str) else scenario_job_id
+    except (ValueError, AttributeError):
+        scen_job_uuid = scenario_job_id
+    scenario_job = db.query(Job).filter(Job.id == scen_job_uuid).first()
     if not scenario_job or not scenario_job.result:
         opt_job.status = JobStatus.FAILED
         opt_job.error = "Scenario Job not found or incomplete"
@@ -284,7 +296,11 @@ def run_strategy_pipeline(strategy_id: str):
     except Exception as e:
         logger.error(f"Strategy {strategy_id} failed: {str(e)}")
         from models.domain import StrategyScenario, Job, JobStatus
-        strategy = db.query(StrategyScenario).filter(StrategyScenario.id == strategy_id).first()
+        try:
+            strat_uuid = uuid.UUID(strategy_id) if isinstance(strategy_id, str) else strategy_id
+        except (ValueError, AttributeError):
+            strat_uuid = strategy_id
+        strategy = db.query(StrategyScenario).filter(StrategyScenario.id == strat_uuid).first()
         if strategy:
             strategy.status = JobStatus.FAILED
             job = db.query(Job).filter(Job.id == strategy.job_id).first()

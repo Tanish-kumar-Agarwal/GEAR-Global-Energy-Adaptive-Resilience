@@ -9,6 +9,7 @@ import { RiskHeatmapMap } from '@/components/risk-heatmap-map';
 import { ApiClient } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { HACKATHON_TOP_RISKS, HACKATHON_MAP_ASSETS, HACKATHON_SUPPLY_ROUTES, HACKATHON_CHOKEPOINTS, SupplyRoute, MapAsset } from '@/data/snapshot';
+import { DisasterEvent, DisastersSummaryResponse } from '@/types';
 import {
   toSupplyRoutes, toChokepoints, toMapAssets, toRegionScores, toTopRisks,
   toWatchlist, toNewsItems, toPriceRows, toCategoryRows, indiaReserveCoverage,
@@ -78,8 +79,21 @@ function WatchlistList({ rows }: { rows?: WatchlistRow[] | null }) {
   );
 }
 
-function AssetPopover({ asset, onClose }: { asset: any, onClose: () => void }) {
-  const [deps, setDeps] = useState<any>(null);
+interface GraphDependencies {
+  status?: string;
+  blast_radius?: Record<string, unknown>;
+  upstream_exposure?: Array<{ Supplier?: string; Commodity?: string } | string[]> | { paths?: Array<{ Supplier?: string; Commodity?: string } | string[]> };
+  downstream_exposure?: Array<{ Supplier?: string; Commodity?: string } | string[]> | { paths?: Array<{ Supplier?: string; Commodity?: string } | string[]> };
+  [key: string]: unknown;
+}
+
+interface AssetPopoverProps {
+  asset: { id: string; name: string; capacity?: number | string; type?: string; [key: string]: unknown };
+  onClose: () => void;
+}
+
+function AssetPopover({ asset, onClose }: AssetPopoverProps) {
+  const [deps, setDeps] = useState<GraphDependencies | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -145,13 +159,14 @@ function AssetPopover({ asset, onClose }: { asset: any, onClose: () => void }) {
 }
 
 const ALL_LAYERS_ON: Record<MapLayerId, boolean> = {
-  routes: true, chokepoints: true, ports: true, production: true, refineries: true, storage: true,
+  routes: true, chokepoints: true, disasters: true, ports: true, production: true, refineries: true, storage: true,
 };
 
-function MapToolbar({ layers, setLayers, onFullscreen }: {
+function MapToolbar({ layers, setLayers, onFullscreen, disasterSummary }: {
   layers: Record<MapLayerId, boolean>;
   setLayers: React.Dispatch<React.SetStateAction<Record<MapLayerId, boolean>>>;
   onFullscreen: () => void;
+  disasterSummary?: DisastersSummaryResponse | null;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const allOn = MAP_LAYER_IDS.every(id => layers[id]);
@@ -184,6 +199,24 @@ function MapToolbar({ layers, setLayers, onFullscreen }: {
       >
         All Layers
       </button>
+
+      {/* GDACS Live Hazard Alert Badge */}
+      {disasterSummary && disasterSummary.total_active_disasters > 0 && (
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-950/60 border border-red-500/40 text-[9.5px] font-mono text-red-300 ml-2">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+          </span>
+          <span className="font-bold text-red-200">GDACS LIVE:</span>
+          <span>{disasterSummary.total_active_disasters} Active Hazards</span>
+          {disasterSummary.counts_by_alert_level?.Red > 0 && (
+            <span className="bg-red-600/80 text-white font-bold px-1 rounded text-[8.5px]">
+              {disasterSummary.counts_by_alert_level.Red} RED
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="flex-1" />
       <div className="relative">
         <button
@@ -193,7 +226,7 @@ function MapToolbar({ layers, setLayers, onFullscreen }: {
           <Layers size={11} /> Layers
         </button>
         {menuOpen && (
-          <div className="absolute right-0 top-full mt-1 w-44 bg-[#101a1f] border border-slate-700/60 rounded-sm shadow-2xl p-1 flex flex-col">
+          <div className="absolute right-0 top-full mt-1 w-48 bg-[#101a1f] border border-slate-700/60 rounded-sm shadow-2xl p-1 flex flex-col">
             {MAP_LAYER_IDS.map(id => (
               <button
                 key={id}
@@ -224,6 +257,8 @@ export default function WarRoom() {
   const [assets, setAssets] = useState<MapAsset[]>(HACKATHON_MAP_ASSETS);
   const [routes, setRoutes] = useState<SupplyRoute[]>(HACKATHON_SUPPLY_ROUTES);
   const [chokepoints, setChokepoints] = useState<ChokepointRow[]>(HACKATHON_CHOKEPOINTS);
+  const [disasters, setDisasters] = useState<DisasterEvent[]>([]);
+  const [disasterSummary, setDisasterSummary] = useState<DisastersSummaryResponse | null>(null);
   const [regionScores, setRegionScores] = useState<Record<string, number> | undefined>(undefined);
   const [topRisks, setTopRisks] = useState<{ id: string; event: string; index: number }[]>(
     HACKATHON_TOP_RISKS.map(r => ({ id: r.id, event: r.event, index: r.index })),
@@ -249,6 +284,8 @@ export default function WarRoom() {
     ApiClient.getWorldOverview().then(setOverview).catch(console.error);
     ApiClient.getRiskEvaluation().then(setRiskEval).catch(console.error);
     ApiClient.getWorldRoutes().then(r => setRoutes(toSupplyRoutes(r))).catch(console.error);
+    ApiClient.getLiveDisasters().then(res => { if (res?.data) setDisasters(res.data); }).catch(console.error);
+    ApiClient.getDisastersSummary().then(setDisasterSummary).catch(console.error);
     Promise.all([ApiClient.getWatchlistAssets(), ApiClient.getWorldChokepoints()])
       .then(([liveAssets, liveChokepoints]) => {
         setAssets(toMapAssets(liveAssets));
@@ -386,13 +423,14 @@ export default function WarRoom() {
 
         {/* MAIN MAP */}
         <div ref={mapPanelRef} className="flex-1 bg-[#182227] rounded-md border border-slate-700/50 overflow-hidden relative flex flex-col">
-          <MapToolbar layers={mapLayers} setLayers={setMapLayers} onFullscreen={toggleFullscreen} />
+          <MapToolbar layers={mapLayers} setLayers={setMapLayers} onFullscreen={toggleFullscreen} disasterSummary={disasterSummary} />
 
           <div className="relative flex-1 bg-slate-900">
             <MapViewer
               assets={assets}
               routes={routes}
               chokepoints={chokepoints}
+              disasters={disasters}
               visibleLayers={mapLayers}
               onFeatureSelect={(feature: SelectedMapFeature) => setSelectedAsset(feature)}
             />
@@ -498,7 +536,14 @@ export default function WarRoom() {
   );
 }
 
-function RiskItem({ label, value, trend, severity }: any) {
+interface RiskItemProps {
+  label: string;
+  value: string | number;
+  trend: 'UP' | 'DOWN' | 'RIGHT' | string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | string;
+}
+
+function RiskItem({ label, value, trend, severity }: RiskItemProps) {
   const getSeverityStyles = (sev: string) => {
     switch (sev) {
       case 'HIGH': return { wrapper: 'border-slate-700/50 border-l-red-500 bg-red-950/20', text: 'text-red-400', glow: 'drop-shadow-[0_0_8px_rgba(248,113,113,0.6)]' };
@@ -590,11 +635,11 @@ function GlobalNewsFeedHorizontal({ news: liveNews }: { news?: { time: string; t
   );
 }
 
-const sysRiskData = [20, 25, 22, 30, 28, 35, 40, 32, 45, 50, 48, 55, 60, 58, 65].map((v, i) => ({ value: v }));
-const supplyStressData = [10, 15, 12, 18, 15, 22, 20, 25, 22, 28, 25, 30, 28, 32, 30].map((v, i) => ({ value: v }));
-const reserveCovData = [40, 45, 42, 38, 40, 35, 38, 32, 35, 30, 28, 32, 25, 20, 22].map((v, i) => ({ value: v }));
+const sysRiskData = [20, 25, 22, 30, 28, 35, 40, 32, 45, 50, 48, 55, 60, 58, 65].map((v) => ({ value: v }));
+const supplyStressData = [10, 15, 12, 18, 15, 22, 20, 25, 22, 28, 25, 30, 28, 32, 30].map((v) => ({ value: v }));
+const reserveCovData = [40, 45, 42, 38, 40, 35, 38, 32, 35, 30, 28, 32, 25, 20, 22].map((v) => ({ value: v }));
 
-function Sparkline({ data, color }: { data: any[], color: string }) {
+function Sparkline({ data, color }: { data: Array<{ value: number }>; color: string }) {
   const colorId = color.replace('#', '');
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -611,7 +656,17 @@ function Sparkline({ data, color }: { data: any[], color: string }) {
   );
 }
 
-function KPICard({ title, value, unit, status, statusColor, max, chartType }: any) {
+interface KPICardProps {
+  title: string;
+  value: string | number;
+  unit?: string;
+  status: string;
+  statusColor: string;
+  max?: string | number;
+  chartType?: 'up-red' | 'up-amber' | 'down-red' | string;
+}
+
+function KPICard({ title, value, unit, status, statusColor, max, chartType }: KPICardProps) {
   return (
     <div className="bg-[#182227] flex-1 rounded-md border border-slate-700/50 p-3 shadow-sm flex flex-col justify-between">
       <h3 className="text-[12px] font-black tracking-wider text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.6)] uppercase">{title}</h3>

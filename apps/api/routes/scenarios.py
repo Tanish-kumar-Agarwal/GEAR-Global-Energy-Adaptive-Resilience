@@ -130,11 +130,13 @@ def run_scenario(id: str, sync_fallback: bool = False, db: Session = Depends(get
         db.flush()
         scenario.job_id = job.id
         db.commit()
-        execute_scenario_simulation(
-            str(job.id),
-            scenario.parameters["target_id"],
-            scenario.parameters["severity"],
-            scenario.parameters.get("duration", 30)
+        execute_scenario_simulation.apply(
+            args=[
+                str(job.id),
+                scenario.parameters["target_id"],
+                scenario.parameters["severity"],
+                scenario.parameters.get("duration", 30)
+            ]
         )
         db.refresh(job)
         if isinstance(job.result, dict):

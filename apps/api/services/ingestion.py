@@ -165,14 +165,20 @@ class IngestionService:
             filter(None, [normalized_event.get("title"), normalized_event.get("description")])
         ).lower()
 
-        # 2. Chokepoint named in the text
+        # 2. Chokepoint named in the text or ID keyword
         for chokepoint in self.db.query(Chokepoint).all():
-            if chokepoint.name and chokepoint.name.lower() in text:
+            name_match = bool(chokepoint.name and chokepoint.name.lower() in text)
+            id_keyword = chokepoint.id.replace("CHK_", "").replace("_", " ").lower()
+            id_match = bool(id_keyword and id_keyword in text)
+            if name_match or id_match:
                 return chokepoint.id
 
-        # 3. Energy asset named in the text
+        # 3. Energy asset named in the text or ID keyword
         for asset in self.db.query(EnergyAsset).all():
-            if asset.name and asset.name.lower() in text:
+            name_match = bool(asset.name and asset.name.lower() in text)
+            id_keyword = asset.id.replace("REF_", "").replace("PORT_", "").replace("STORE_", "").replace("_", " ").lower()
+            id_match = bool(id_keyword and id_keyword in text)
+            if name_match or id_match:
                 return asset.id
 
         # 4. Country reference from the source

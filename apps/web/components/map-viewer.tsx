@@ -5,14 +5,16 @@ import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MAP_STYLE_URL, MAPLIBRE_WORKER_URL } from '@/lib/config';
 import { HACKATHON_SUPPLY_ROUTES, HACKATHON_CHOKEPOINTS, SupplyRoute, RouteStatus } from '@/data/snapshot';
+import { DisasterEvent } from '@/types';
 
-export type MapLayerId = 'routes' | 'chokepoints' | 'ports' | 'production' | 'refineries' | 'storage';
+export type MapLayerId = 'routes' | 'chokepoints' | 'disasters' | 'ports' | 'production' | 'refineries' | 'storage';
 
-export const MAP_LAYER_IDS: MapLayerId[] = ['routes', 'chokepoints', 'ports', 'production', 'refineries', 'storage'];
+export const MAP_LAYER_IDS: MapLayerId[] = ['routes', 'chokepoints', 'disasters', 'ports', 'production', 'refineries', 'storage'];
 
 export const MAP_LAYER_LABELS: Record<MapLayerId, string> = {
   routes: 'Supply Routes',
   chokepoints: 'Chokepoints',
+  disasters: 'Natural Hazards (GDACS)',
   ports: 'Ports',
   production: 'Production',
   refineries: 'Refineries',
@@ -52,6 +54,7 @@ interface MapViewerProps {
   assets: MapAssetInput[];
   routes?: SupplyRoute[];
   chokepoints?: MapChokepointInput[];
+  disasters?: DisasterEvent[];
   visibleLayers?: Record<MapLayerId, boolean>;
   onFeatureSelect?: (feature: SelectedMapFeature) => void;
   // True while the overlay shows a severity-preview estimate rather than a
@@ -61,7 +64,7 @@ interface MapViewerProps {
 }
 
 const ALL_VISIBLE: Record<MapLayerId, boolean> = {
-  routes: true, chokepoints: true, ports: true, production: true, refineries: true, storage: true,
+  routes: true, chokepoints: true, disasters: true, ports: true, production: true, refineries: true, storage: true,
 };
 
 const STATUS_COLORS: Record<RouteStatus, string> = {
@@ -81,6 +84,7 @@ const ROUTE_COLOR_EXPR: maplibregl.ExpressionSpecification = [
 const LAYER_GROUPS: Record<MapLayerId, string[]> = {
   routes: ['routes-glow', 'routes-glow-pulse', 'routes-line'],
   chokepoints: ['chokepoints-point', 'chokepoints-label'],
+  disasters: ['disasters-halo', 'disasters-point', 'disasters-label'],
   ports: ['assets-ports'],
   production: ['assets-production'],
   refineries: ['assets-refineries'],
@@ -163,6 +167,27 @@ function assetsToGeoJSON(assets: MapAssetInput[], category: AssetCategory): GeoJ
         properties: { id: a.id, name: a.name, type: a.type, capacity: a.capacity },
         geometry: { type: 'Point', coordinates: [a.lng, a.lat] },
       })),
+  };
+}
+
+function disastersToGeoJSON(disasters: DisasterEvent[] = []): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: disasters.map(d => ({
+      type: 'Feature',
+      properties: {
+        id: d.id,
+        name: d.name,
+        type: d.event_type,
+        alert_level: d.alert_level,
+        alert_score: d.alert_score,
+        severity_text: d.severity_text,
+        country: d.country,
+        report_url: d.report_url,
+        threatened_chokepoints: (d.threatened_chokepoints || []).join(', ')
+      },
+      geometry: { type: 'Point', coordinates: [d.lng, d.lat] },
+    })),
   };
 }
 
@@ -300,9 +325,11 @@ function addSourcesAndLayers(
   assets: MapAssetInput[],
   routes: SupplyRoute[],
   chokepoints: MapChokepointInput[],
+  disasters: DisasterEvent[] = [],
 ) {
   map.addSource('supply-routes', { type: 'geojson', data: routesToGeoJSON(routes) });
   map.addSource('chokepoints', { type: 'geojson', data: chokepointsToGeoJSON(chokepoints) });
+  map.addSource('disasters', { type: 'geojson', data: disastersToGeoJSON(disasters) });
   ASSET_CATEGORIES.forEach(cat => {
     map.addSource(`assets-${cat}`, { type: 'geojson', data: assetsToGeoJSON(assets, cat) });
   });
@@ -333,6 +360,81 @@ function addSourcesAndLayers(
       'line-opacity': 0.95,
       'line-dasharray': DASH_SEQUENCE[0],
     },
+  });
+
+  // Disasters pulsing halo
+  map.addLayer({
+    id: 'disasters-halo',
+    type: 'circle',
+    source: 'disasters',
+    paint: {
+      'circle-radius': [
+        'interpolate', ['linear'], ['zoom'],
+        1, 14,
+        5, 24,
+        10, 36
+      ],
+      'circle-color': [
+        'match', ['get', 'alert_level'],
+        'Red', '#ef4444',
+        'Orange', '#f97316',
+        'Green', '#10b981',
+        '#f59e0b'
+      ],
+      'circle-opacity': 0.28,
+      'circle-stroke-width': 1.5,
+      'circle-stroke-color': [
+        'match', ['get', 'alert_level'],
+        'Red', '#fca5a5',
+        'Orange', '#fed7aa',
+        'Green', '#a7f3d0',
+        '#fde68a'
+      ],
+      'circle-stroke-opacity': 0.8
+    }
+  });
+
+  // Disasters point core
+  map.addLayer({
+    id: 'disasters-point',
+    type: 'circle',
+    source: 'disasters',
+    paint: {
+      'circle-radius': 6.5,
+      'circle-color': [
+        'match', ['get', 'type'],
+        'CYCLONE', '#06b6d4',
+        'FLOOD', '#3b82f6',
+        'EARTHQUAKE', '#ef4444',
+        'WILDFIRE', '#f97316',
+        'VOLCANO', '#dc2626',
+        'TSUNAMI', '#0284c7',
+        '#8b5cf6'
+      ],
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#090e16'
+    }
+  });
+
+  // Disasters label
+  map.addLayer({
+    id: 'disasters-label',
+    type: 'symbol',
+    source: 'disasters',
+    layout: {
+      'text-field': ['concat', ['get', 'name'], ' (', ['get', 'type'], ')'],
+      'text-font': ['Montserrat Medium'],
+      'text-size': 9,
+      'text-anchor': 'bottom',
+      'text-offset': [0, -1.0],
+      'text-optional': true,
+      'text-max-width': 12
+    },
+    paint: {
+      'text-color': '#f8fafc',
+      'text-halo-color': '#090e16',
+      'text-halo-width': 2
+    }
   });
 
   ASSET_CATEGORIES.forEach(cat => {
@@ -420,6 +522,7 @@ export function MapViewer({
   assets,
   routes = HACKATHON_SUPPLY_ROUTES,
   chokepoints = HACKATHON_CHOKEPOINTS,
+  disasters = [],
   visibleLayers = ALL_VISIBLE,
   onFeatureSelect,
   overlayPreview = false,
@@ -431,6 +534,7 @@ export function MapViewer({
   const assetsRef = useRef(assets);
   const routesRef = useRef(routes);
   const chokepointsRef = useRef(chokepoints);
+  const disastersRef = useRef(disasters);
   const visibleRef = useRef(visibleLayers);
   const onSelectRef = useRef(onFeatureSelect);
 
@@ -472,7 +576,7 @@ export function MapViewer({
     m.on('load', () => {
       m.resize();
       addMapImages(m);
-      addSourcesAndLayers(m, assetsRef.current, routesRef.current, chokepointsRef.current);
+      addSourcesAndLayers(m, assetsRef.current, routesRef.current, chokepointsRef.current, disastersRef.current);
       applyVisibility();
       loaded.current = true;
 
@@ -491,6 +595,34 @@ export function MapViewer({
         m.on('mouseenter', layerId, () => { m.getCanvas().style.cursor = 'pointer'; });
         m.on('mouseleave', layerId, () => { m.getCanvas().style.cursor = ''; });
       });
+
+      // Disasters popup interaction
+      m.on('click', 'disasters-point', e => {
+        const props = e.features?.[0]?.properties;
+        const coords = (e.features?.[0]?.geometry as any)?.coordinates;
+        if (!props || !coords) return;
+
+        const alertColor = props.alert_level === 'Red' ? '#ef4444' : props.alert_level === 'Orange' ? '#f97316' : '#10b981';
+        
+        new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: '320px', className: 'gear-disaster-popup' })
+          .setLngLat(coords as [number, number])
+          .setHTML(`
+            <div style="background:#0c1318; color:#f8fafc; padding:12px; border-radius:6px; border:1px solid rgba(148,163,184,0.3); font-family:sans-serif;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="font-size:9px; font-weight:900; letter-spacing:1px; color:#38bdf8; text-transform:uppercase;">GDACS LIVE ALERT</span>
+                <span style="background:${alertColor}25; color:${alertColor}; border:1px solid ${alertColor}60; font-size:9px; font-weight:800; padding:2px 6px; border-radius:3px; text-transform:uppercase;">${props.alert_level} ALERT</span>
+              </div>
+              <div style="font-size:13px; font-weight:bold; color:#fff; margin-bottom:4px;">${props.name}</div>
+              <div style="font-size:11px; color:#cbd5e1; margin-bottom:6px;">${props.severity_text || props.description || ''}</div>
+              <div style="font-size:10px; color:#94a3b8; margin-bottom:2px;"><strong>Location:</strong> ${props.country || 'Global'}</div>
+              ${props.threatened_chokepoints ? `<div style="font-size:10px; color:#f87171; margin-top:4px;"><strong>Threatened Chokepoint:</strong> ${props.threatened_chokepoints}</div>` : ''}
+              ${props.report_url ? `<div style="margin-top:8px; border-top:1px solid #1e293b; padding-top:6px;"><a href="${props.report_url}" target="_blank" rel="noopener noreferrer" style="font-size:10px; font-weight:bold; color:#38bdf8; text-decoration:none;">View GDACS Situation Report &rarr;</a></div>` : ''}
+            </div>
+          `)
+          .addTo(m);
+      });
+      m.on('mouseenter', 'disasters-point', () => { m.getCanvas().style.cursor = 'pointer'; });
+      m.on('mouseleave', 'disasters-point', () => { m.getCanvas().style.cursor = ''; });
 
       // Single rAF loop for the whole map: dash march at ~12fps plus a slow
       // opacity pulse on the disrupted-route glow. Toggling layers never
@@ -544,6 +676,13 @@ export function MapViewer({
     if (!m || !loaded.current) return;
     (m.getSource('chokepoints') as maplibregl.GeoJSONSource | undefined)?.setData(chokepointsToGeoJSON(chokepoints));
   }, [chokepoints]);
+
+  useEffect(() => {
+    disastersRef.current = disasters;
+    const m = map.current;
+    if (!m || !loaded.current) return;
+    (m.getSource('disasters') as maplibregl.GeoJSONSource | undefined)?.setData(disastersToGeoJSON(disasters));
+  }, [disasters]);
 
   // Preview styling: entities saturated at baseline (pinned) fade far back so
   // the ones that actually move with the slider carry the signal; the dashed

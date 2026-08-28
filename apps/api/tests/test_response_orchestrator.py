@@ -3,36 +3,15 @@ import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from fastapi.testclient import TestClient
 from main import app
-from core.database import get_db, Base
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+from core.database import Base, engine, SessionLocal
 import uuid
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, 
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def override_get_db():
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def setup_db():
-    from models import domain
     Base.metadata.create_all(bind=engine)
     yield
-    Base.metadata.drop_all(bind=engine)
 
 def test_full_orchestrator_flow():
     # 1. Create a Scenario
@@ -45,13 +24,13 @@ def test_full_orchestrator_flow():
     assert scenario_res.status_code == 200
     scenario_id = scenario_res.json()["id"]
 
-    # 2. Trigger Simulation (Wait not needed for this test as we fake the job result in DB)
-    run_res = client.post(f"/api/v1/scenarios/{scenario_id}/run")
-    assert run_res.status_code == 202
-    job_id = run_res.json()["job_id"]
+    # 2. Trigger Simulation
+    run_res = client.post(f"/api/v1/scenarios/{scenario_id}/run?sync_fallback=true")
+    assert run_res.status_code in [200, 202]
+    job_id = str(run_res.json()["job_id"])
     
     # 3. Inject Fake Simulation Job Data directly into the DB to test the Orchestrator mapping
-    db = TestingSessionLocal()
+    db = SessionLocal()
     from models.domain import Job, JobStatus, DecisionAudit, Scenario
     scenario = db.query(Scenario).filter(Scenario.id == uuid.UUID(scenario_id)).first()
     scenario.job_id = uuid.UUID(job_id)

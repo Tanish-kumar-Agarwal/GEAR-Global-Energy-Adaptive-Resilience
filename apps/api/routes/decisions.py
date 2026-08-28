@@ -35,6 +35,33 @@ def _create_audit(db: Session, scenario_id: str, action: str, reason: str, comme
     db.add(audit)
     return audit
 
+class CreateDecisionRequest(BaseModel):
+    scenario_id: str
+    recommendation_id: Optional[str] = None
+    status: Optional[str] = "PENDING"
+    reason: Optional[str] = None
+    action_plan: Optional[Dict[str, Any]] = None
+
+@router.post("", response_model=Dict[str, Any])
+def create_decision(req: CreateDecisionRequest, db: Session = Depends(get_db), user: User = Depends(RequirePermissions("decision:review"))):
+    audit = DecisionAudit(
+        scenario_id=req.scenario_id,
+        recommendation_id=req.recommendation_id,
+        status=req.status or "PENDING",
+        actor_id=user.id,
+        reason=req.reason or "Submitted for review",
+        action_plan=req.action_plan or {}
+    )
+    db.add(audit)
+    db.commit()
+    db.refresh(audit)
+    return {
+        "decision_id": str(audit.id),
+        "scenario_id": audit.scenario_id,
+        "status": audit.status,
+        "message": "Decision created successfully"
+    }
+
 @router.post("/{scenario_id}/approve")
 def approve_decision(scenario_id: str, req: DecisionActionRequest, db: Session = Depends(get_db), user: User = Depends(RequirePermissions("decision:approve"))):
     # 1. Validate scenario exists

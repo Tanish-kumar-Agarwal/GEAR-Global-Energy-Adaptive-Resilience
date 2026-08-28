@@ -589,6 +589,7 @@ export interface DemoIngestionSource {
 }
 
 export const HACKATHON_INGESTION_SOURCES: DemoIngestionSource[] = [
+  { name: 'GDACS (UN / EC)', status: 'OK (Green)', lastSync: '2026-08-28 17:30:00', recordsPerDay: 480_000, reliability: 99, pipelines: 4 },
   { name: 'EIA', status: 'OK (Green)', lastSync: '2026-08-22 09:47:12', recordsPerDay: 2_840_000, reliability: 98, pipelines: 4 },
   { name: 'GDELT', status: 'OK (Green)', lastSync: '2026-08-22 09:52:30', recordsPerDay: 2_310_000, reliability: 96, pipelines: 4 },
   { name: 'Open-Meteo', status: 'OK (Green)', lastSync: '2026-08-22 09:55:04', recordsPerDay: 1_920_000, reliability: 95, pipelines: 3 },

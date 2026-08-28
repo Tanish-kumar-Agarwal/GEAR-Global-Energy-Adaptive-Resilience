@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, root_dir)
-load_dotenv(os.path.join(root_dir, ".env"))
+load_dotenv(os.path.join(root_dir, ".env"), override=False)
 
 from core.logging import setup_logging
 setup_logging()
@@ -22,11 +22,16 @@ app = FastAPI(
 
 from core.database import engine, Base, SessionLocal
 from models import domain
-Base.metadata.create_all(bind=engine)
 
-# create_all never re-adds a dropped column; this does, loudly (see module doc).
-from core.schema_guard import ensure_route_geometry_schema
-ensure_route_geometry_schema(engine, SessionLocal)
+def init_db():
+    """Initializes the database schema and seeds initial roles safely."""
+    try:
+        Base.metadata.create_all(bind=engine)
+        from core.schema_guard import ensure_route_geometry_schema
+        ensure_route_geometry_schema(engine, SessionLocal)
+        seed_admin_user()
+    except Exception as e:
+        logging.warning(f"Database initialization deferred or skipped: {e}")
 
 from middleware.request_context import RequestContextMiddleware
 app.add_middleware(RequestContextMiddleware)
@@ -79,7 +84,7 @@ def seed_admin_user():
 
 @app.on_event("startup")
 def startup_event():
-    seed_admin_user()
+    init_db()
 
 @app.get("/health")
 def root_health_check():
@@ -146,7 +151,7 @@ def get_health_components():
         "components": components
     }
 
-from routes import auth, world, intelligence, risks, scenarios, decisions, optimization, market, graph, response_routes, strategy
+from routes import auth, world, intelligence, risks, scenarios, decisions, optimization, market, graph, response_routes, strategy, disasters
 
 app.include_router(auth.router)
 app.include_router(world.router)
@@ -159,6 +164,7 @@ app.include_router(market.router)
 app.include_router(graph.router)
 app.include_router(response_routes.router)
 app.include_router(strategy.router)
+app.include_router(disasters.router, prefix="/api/v1/disasters", tags=["Disasters"])
 
 @app.get("/api/v1/health")
 def api_v1_health_check():

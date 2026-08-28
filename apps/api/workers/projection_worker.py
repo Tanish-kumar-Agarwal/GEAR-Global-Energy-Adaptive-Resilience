@@ -1,3 +1,4 @@
+from celery.exceptions import Retry
 from .celery_app import celery_app
 from core.database import SessionLocal
 from models.domain import OutboxEvent, JobStatus
@@ -196,10 +197,11 @@ def process_outbox_events(self):
                 
             except ConnectionError as ce:
                 logger.error(f"Infrastructure error during outbox processing: {ce}")
-                # Do not increment retry_count for infrastructure failures
-                # Break the loop to retry the whole task later
-                db.rollback()
-                raise self.retry(exc=ce, countdown=10)
+                event.retry_count += 1
+                if event.retry_count >= 3:
+                    event.status = JobStatus.FAILED
+                db.commit()
+                break
             except Exception as e:
                 logger.error(f"Failed to process outbox event {event.id}: {e}")
                 event.retry_count += 1
@@ -207,6 +209,8 @@ def process_outbox_events(self):
                     event.status = JobStatus.FAILED
                 
         db.commit()
+    except Retry:
+        raise
     except Exception as e:
         db.rollback()
         logger.error(f"Database error during outbox processing: {e}")

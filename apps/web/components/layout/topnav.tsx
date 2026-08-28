@@ -124,7 +124,15 @@ export function TopNav() {
   );
 }
 
-function Tab({ href, icon, title, sub, active }: any) {
+interface TabProps {
+  href: string;
+  icon: React.ReactNode;
+  title: string;
+  sub: string;
+  active?: boolean;
+}
+
+function Tab({ href, icon, title, sub, active }: TabProps) {
   return (
     <Link href={href}>
       <div className={`h-full flex flex-col justify-center px-6 border-r border-[#182227] border-t-2 transition-all cursor-pointer ${

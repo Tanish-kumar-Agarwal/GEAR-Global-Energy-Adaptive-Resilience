@@ -139,6 +139,24 @@ export interface ExplainabilityResponse {
   contributing_events: IntelligenceEvent[];
 }
 
+export interface RadarDataPoint {
+  subject: string;
+  baseline?: number;
+  optimized?: number;
+  fullMark?: number;
+  A?: number;
+  B?: number;
+}
+
+export interface MasterResponseOption {
+  option_id: string;
+  option_type: string;
+  name: string;
+  description: string;
+  feasibility: string;
+  expected_effect: Record<string, unknown>;
+}
+
 export interface MasterResponseObject {
   status: string;
   problem: {
@@ -164,31 +182,102 @@ export interface MasterResponseObject {
     reserve_depletion?: string;
     shipping_cost?: string;
   };
-  radar_data?: any[];
-  options: {
-    option_id: string;
-    option_type: string;
-    name: string;
-    description: string;
-    feasibility: string;
-    expected_effect: Record<string, any>;
-  }[];
-  optimization: Record<string, any>;
+  radar_data?: RadarDataPoint[];
+  options: MasterResponseOption[];
+  optimization: {
+    status?: string;
+    allocation?: Array<{ destination_id: string; volume_allocated: number; supplier_id: string; route_id: string }>;
+    reserve_usage?: { total_drawdown?: number };
+    objective?: { baseline_shortage?: number; optimized_shortage?: number; improvement?: number };
+    [key: string]: any;
+  };
   recommendation: {
     recommendation_id: string;
     action_type: string;
     recommended_action: string;
     priority: string;
-    expected_physical_impact: Record<string, any>;
-    expected_economic_impact: Record<string, any>;
+    expected_physical_impact: { shortage?: number | string; [key: string]: any };
+    expected_economic_impact: { loss?: string; total?: string | number; [key: string]: any };
     optimization_status: string;
     primary_drivers: string[];
+    action_plan?: {
+      optimization?: {
+        allocation?: Array<{ destination_id: string; volume_allocated: number; supplier_id: string; route_id: string }>;
+        reserve_usage?: { total_drawdown?: number };
+      };
+    };
+    [key: string]: any;
   };
-  explanation: Record<string, any>;
-  approval: Record<string, any>;
-  alternatives: Record<string, any>[];
-  uncertainty: Record<string, any>;
-  assumptions: Record<string, any>[];
-  provenance: Record<string, any>[];
-  decision_audit: Record<string, any> | null;
+  explanation: {
+    causal_chain?: Array<{ cause: string; effect: string }>;
+    primary_drivers?: string[];
+    [key: string]: any;
+  };
+  approval: {
+    status?: string;
+    decision_version?: string;
+    [key: string]: any;
+  };
+  alternatives: Array<{ strategy?: string; feasibility?: string; shortage?: string | number; [key: string]: any }>;
+  uncertainty: {
+    sample_count?: number;
+    P10?: { supply_gap?: number };
+    P50?: { supply_gap?: number };
+    P90?: { supply_gap?: number };
+    [key: string]: any;
+  };
+  assumptions: Array<Record<string, any>>;
+  provenance: Array<Record<string, any>>;
+  decision_audit: { decision_id?: string; [key: string]: any } | null;
+}
+
+export type DisasterType = 'CYCLONE' | 'FLOOD' | 'EARTHQUAKE' | 'WILDFIRE' | 'VOLCANO' | 'DROUGHT' | 'TSUNAMI' | 'NATURAL_HAZARD';
+
+export type DisasterAlertLevel = 'Red' | 'Orange' | 'Green';
+
+export interface DisasterEvent {
+  id: string;
+  event_id: number;
+  event_type: DisasterType;
+  raw_type: string;
+  name: string;
+  description: string;
+  alert_level: DisasterAlertLevel;
+  alert_score: number;
+  lat: number;
+  lng: number;
+  country: string;
+  from_date: string;
+  to_date: string;
+  severity_text: string;
+  report_url: string;
+  threatened_chokepoints?: string[];
+}
+
+export interface DisastersResponse {
+  status: string;
+  count: number;
+  data: DisasterEvent[];
+  is_live: boolean;
+  source: string;
+}
+
+export interface DisastersSummaryResponse {
+  status: string;
+  total_active_disasters: number;
+  is_live_feed: boolean;
+  counts_by_type: Record<string, number>;
+  counts_by_alert_level: Record<string, number>;
+  critical_energy_threats: Array<{
+    disaster_name: string;
+    event_type: string;
+    alert_level: string;
+    chokepoints: string[];
+  }>;
+  provenance: {
+    source: string;
+    authority: string;
+    sync_frequency: string;
+    is_live: boolean;
+  };
 }

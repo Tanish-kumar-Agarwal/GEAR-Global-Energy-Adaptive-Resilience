@@ -147,14 +147,14 @@ function DecisionCenterContent() {
            )}
         </div>
 
-        {/* MIDDLE SECTION */}
+         {/* MIDDLE SECTION */}
         <div className="flex gap-3 h-[320px] flex-shrink-0">
            {/* PROPOSED ACTIONS */}
            <div className="w-[55%] bg-[#182227] rounded-md border border-slate-700/50 p-4 shadow-sm flex flex-col relative">
               <h3 className="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-4">Recommended Action</h3>
               <div className="flex flex-col gap-2 overflow-y-auto">
-                 {(rec as any)?.action_plan?.optimization?.allocation ? (
-                    (rec as any).action_plan.optimization.allocation.map((alloc: any, idx: number) => (
+                 {responseObj?.optimization?.allocation && responseObj.optimization.allocation.length > 0 ? (
+                    responseObj.optimization.allocation.map((alloc: any, idx: number) => (
                        <div key={idx} className="bg-[#0f181b] p-3 rounded border border-slate-700/50">
                           <div className="text-xs font-bold text-slate-200 mb-1">Route to {alloc.destination_id}</div>
                           <div className="text-[10px] text-slate-400">Procure {alloc.volume_allocated.toFixed(2)} units from {alloc.supplier_id} via route {alloc.route_id}.</div>
@@ -163,10 +163,10 @@ function DecisionCenterContent() {
                  ) : (
                     <div className="text-xs text-slate-500">No optimization actions proposed.</div>
                  )}
-                 {(rec as any)?.action_plan?.optimization?.reserve_usage?.total_drawdown > 0 && (
+                 {Boolean(responseObj?.optimization?.reserve_usage?.total_drawdown && responseObj.optimization.reserve_usage.total_drawdown > 0) && (
                    <div className="bg-[#0f181b] p-3 rounded border border-slate-700/50">
                       <div className="text-xs font-bold text-slate-200 mb-1">Reserve Drawdown</div>
-                      <div className="text-[10px] text-slate-400">Draw {(rec as any).action_plan.optimization.reserve_usage.total_drawdown} units from storage.</div>
+                      <div className="text-[10px] text-slate-400">Draw {responseObj?.optimization?.reserve_usage?.total_drawdown} units from storage.</div>
                    </div>
                  )}
               </div>
@@ -175,7 +175,7 @@ function DecisionCenterContent() {
            {/* ALTERNATIVES */}
            <div className="flex-1 bg-[#182227] rounded-md border border-slate-700/50 p-4 shadow-sm relative overflow-y-auto">
               <h3 className="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-4">Alternatives Considered</h3>
-              {responseObj?.alternatives?.length ? responseObj.alternatives.map((alt: any, i: number) => (
+              {responseObj?.alternatives?.length ? responseObj.alternatives.map((alt: { strategy?: string; feasibility?: string; shortage?: string | number }, i: number) => (
                  <div key={i} className="flex flex-col gap-1 text-xs border-b border-slate-700 pb-2 mb-2 last:border-0">
                     <div className="font-bold text-slate-200">{alt.strategy}</div>
                     <div className="text-slate-400">Feasibility: <span className="uppercase text-slate-300">{alt.feasibility}</span></div>
@@ -190,9 +190,9 @@ function DecisionCenterContent() {
            {/* EVIDENCE & LOGIC */}
            <div className="w-[55%] bg-[#182227] rounded-md border border-slate-700/50 p-4 relative flex flex-col overflow-y-auto">
               <h3 className="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-4">Provenance & Logic Chain</h3>
-              {responseObj?.explanation?.causal_chain?.length ? (
+              {responseObj?.explanation?.causal_chain && responseObj.explanation.causal_chain.length > 0 ? (
                 <div className="space-y-2">
-                  {responseObj.explanation.causal_chain.map((c: any, i: number) => (
+                  {responseObj.explanation.causal_chain.map((c: { cause?: string; effect?: string }, i: number) => (
                     <div key={i} className="text-xs bg-slate-900 border border-slate-800 p-2 rounded">
                       <span className="text-amber-500 font-bold">CAUSE:</span> {c.cause} <br />
                       <span className="text-blue-500 font-bold">EFFECT:</span> {c.effect}
@@ -208,10 +208,10 @@ function DecisionCenterContent() {
               {responseObj?.uncertainty?.sample_count ? (
                  <div className="flex flex-col gap-2">
                     <div className="text-xs text-slate-300 font-bold uppercase text-emerald-400">Statistical bounds achieved</div>
-                    <div className="text-[10px] text-slate-500 mb-2">Samples: {responseObj.uncertainty.sample_count}</div>
-                    <div className="text-xs text-slate-400">P10 Shortage: {responseObj.uncertainty.P10?.supply_gap}</div>
-                    <div className="text-xs text-slate-400">P50 Shortage: {responseObj.uncertainty.P50?.supply_gap}</div>
-                    <div className="text-xs text-slate-400">P90 Shortage: {responseObj.uncertainty.P90?.supply_gap}</div>
+                    <div className="text-[10px] text-slate-500 mb-2">Samples: {String(responseObj.uncertainty.sample_count)}</div>
+                    <div className="text-xs text-slate-400">P10 Shortage: {responseObj.uncertainty.P10?.supply_gap !== undefined ? String(responseObj.uncertainty.P10.supply_gap) : 'N/A'}</div>
+                    <div className="text-xs text-slate-400">P50 Shortage: {responseObj.uncertainty.P50?.supply_gap !== undefined ? String(responseObj.uncertainty.P50.supply_gap) : 'N/A'}</div>
+                    <div className="text-xs text-slate-400">P90 Shortage: {responseObj.uncertainty.P90?.supply_gap !== undefined ? String(responseObj.uncertainty.P90.supply_gap) : 'N/A'}</div>
                  </div>
               ) : (
                 <div className="text-xs text-slate-400 italic">P10/P50/P90: {renderDataUnavailable()}</div>
@@ -228,23 +228,23 @@ function DecisionCenterContent() {
               <button 
                 onClick={() => setActionDialog('REVIEW')}
                 disabled={loading || !scenarioId || (status === 'APPROVED' || status === 'REJECTED')} 
-                className="px-6 py-2 bg-[#0f181b] hover:bg-slate-800 border border-slate-600 disabled:opacity-50 text-slate-300 text-xs font-bold rounded flex items-center gap-2 transition-colors"
+                className="px-4 py-2 rounded text-xs font-bold bg-amber-900/40 border border-amber-600/50 text-amber-300 hover:bg-amber-800/60 disabled:opacity-30 disabled:cursor-not-allowed uppercase tracking-wider"
               >
-                <Clock size={14} /> Request Review
+                Request Review
               </button>
               <button 
                 onClick={() => setActionDialog('REJECT')}
                 disabled={loading || !scenarioId || (status === 'APPROVED' || status === 'REJECTED')} 
-                className="px-6 py-2 bg-red-900/30 hover:bg-red-900/50 border border-red-800 disabled:opacity-50 text-red-400 text-xs font-bold rounded flex items-center gap-2 transition-colors"
+                className="px-4 py-2 rounded text-xs font-bold bg-red-900/40 border border-red-600/50 text-red-300 hover:bg-red-800/60 disabled:opacity-30 disabled:cursor-not-allowed uppercase tracking-wider"
               >
-                <XCircle size={14} /> Reject
+                Reject
               </button>
               <button 
                 onClick={() => setActionDialog('APPROVE')}
                 disabled={loading || !scenarioId || (status === 'APPROVED' || status === 'REJECTED')} 
-                className="px-8 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded flex items-center gap-2 shadow-lg shadow-emerald-900/30 transition-colors"
+                className="px-5 py-2 rounded text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed uppercase tracking-wider shadow-lg shadow-emerald-950"
               >
-                <CheckCircle2 size={14} /> Approve
+                Approve
               </button>
            </div>
         </div>
@@ -265,7 +265,7 @@ function DecisionCenterContent() {
               </div>
               <div>
                 <div className="text-[10px] text-slate-500 uppercase">Optimized Shortage</div>
-                <div className="text-lg text-emerald-400 font-bold">{rec?.expected_physical_impact?.shortage ?? renderDataUnavailable()}</div>
+                <div className="text-lg text-emerald-400 font-bold">{rec?.expected_physical_impact?.shortage !== undefined ? String(rec.expected_physical_impact.shortage) : renderDataUnavailable()}</div>
               </div>
             </div>
           ) : renderDataUnavailable()}

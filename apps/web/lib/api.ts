@@ -12,7 +12,10 @@ import {
   RiskEvaluationResponse,
   IntelligenceEventsResponse,
   ExplainabilityResponse,
-  DataIntelligenceSourcesResponse
+  DataIntelligenceSourcesResponse,
+  DisasterEvent,
+  DisastersResponse,
+  DisastersSummaryResponse
 } from '../types';
 
 import { DATA_MODE, DEMO_AUTO_LOGIN, DEMO_CREDENTIALS } from './config';
@@ -113,6 +116,117 @@ function snapshotResponse(endpoint: string, options?: RequestInit): unknown {
   // Empty live-sources list: the data-intelligence page then renders its own
   // static source catalog without touching the network.
   if (endpoint.startsWith('/intelligence/data-sources')) return { sources: [] };
+  if (endpoint.startsWith('/disasters/live')) {
+    return {
+      status: 'ok',
+      count: 4,
+      is_live: false,
+      source: 'GDACS (United Nations / European Commission) [Snapshot Fallback]',
+      data: [
+        {
+          id: 'GDACS_TC_1001315',
+          event_id: 1001315,
+          event_type: 'CYCLONE',
+          raw_type: 'TC',
+          name: 'Tropical Cyclone LOWELL',
+          description: 'Tropical Cyclone with high wind shear in Bay of Bengal',
+          alert_level: 'Orange',
+          alert_score: 2.0,
+          lat: 14.5,
+          lng: 86.2,
+          country: 'India (Bay of Bengal)',
+          from_date: '2026-08-27T00:00:00Z',
+          to_date: '2026-08-30T00:00:00Z',
+          severity_text: 'Tropical Storm (wind speed 165 km/h)',
+          report_url: 'https://www.gdacs.org/report.aspx?eventid=1001315&eventtype=TC',
+          threatened_chokepoints: ['CHK_MALACCA']
+        },
+        {
+          id: 'GDACS_FL_1104124',
+          event_id: 1104124,
+          event_type: 'FLOOD',
+          raw_type: 'FL',
+          name: 'Severe Monsoon Flooding in South Asia',
+          description: 'Heavy monsoon inundation affecting coastal energy supply infrastructure',
+          alert_level: 'Red',
+          alert_score: 2.5,
+          lat: 24.2,
+          lng: 89.9,
+          country: 'Bangladesh / Eastern India',
+          from_date: '2026-08-25T00:00:00Z',
+          to_date: '2026-08-30T00:00:00Z',
+          severity_text: 'Severe Flood Level 3 (>350mm rainfall)',
+          report_url: 'https://www.gdacs.org/report.aspx?eventid=1104124&eventtype=FL',
+          threatened_chokepoints: []
+        },
+        {
+          id: 'GDACS_EQ_1562260',
+          event_id: 1562260,
+          event_type: 'EARTHQUAKE',
+          raw_type: 'EQ',
+          name: 'M 5.8 Earthquake in Western Asia',
+          description: 'Seismic activity near regional energy pipeline terminals',
+          alert_level: 'Orange',
+          alert_score: 2.0,
+          lat: 28.1,
+          lng: 52.4,
+          country: 'Iran / Persian Gulf',
+          from_date: '2026-08-28T05:13:35Z',
+          to_date: '2026-08-28T05:13:35Z',
+          severity_text: 'Magnitude 5.8M, Depth: 12km',
+          report_url: 'https://www.gdacs.org/report.aspx?eventid=1562260&eventtype=EQ',
+          threatened_chokepoints: ['CHK_HORMUZ']
+        },
+        {
+          id: 'GDACS_WF_1031295',
+          event_id: 1031295,
+          event_type: 'WILDFIRE',
+          raw_type: 'WF',
+          name: 'Forest Fires near Mediterranean Corridor',
+          description: 'Wildfires affecting coastal utility grids and port access',
+          alert_level: 'Green',
+          alert_score: 1.0,
+          lat: 36.6,
+          lng: 5.6,
+          country: 'Algeria / Western Mediterranean',
+          from_date: '2026-08-22T00:00:00Z',
+          to_date: '2026-08-28T00:00:00Z',
+          severity_text: 'Wildfire burn area > 5,200 ha',
+          report_url: 'https://www.gdacs.org/report.aspx?eventid=1031295&eventtype=WF',
+          threatened_chokepoints: []
+        }
+      ]
+    };
+  }
+  if (endpoint.startsWith('/disasters/summary')) {
+    return {
+      status: 'ok',
+      total_active_disasters: 4,
+      is_live_feed: false,
+      counts_by_type: { CYCLONE: 1, FLOOD: 1, EARTHQUAKE: 1, WILDFIRE: 1 },
+      counts_by_alert_level: { Red: 1, Orange: 2, Green: 1 },
+      critical_energy_threats: [
+        {
+          disaster_name: 'M 5.8 Earthquake in Western Asia',
+          event_type: 'EARTHQUAKE',
+          alert_level: 'Orange',
+          chokepoints: ['Strait of Hormuz']
+        },
+        {
+          disaster_name: 'Tropical Cyclone LOWELL',
+          event_type: 'CYCLONE',
+          alert_level: 'Orange',
+          chokepoints: ['Malacca Strait']
+        }
+      ],
+      provenance: {
+        source: 'GDACS Global Disaster Alert and Coordination System',
+        authority: 'United Nations / European Commission Joint Research Centre',
+        sync_frequency: '5m',
+        is_live: false
+      }
+    };
+  }
   return undefined;
 }
 
@@ -459,5 +573,14 @@ export class ApiClient {
   
   static async getDecisionAudit(scenarioId: string): Promise<any[]> {
     return this.request<any[]>(`/decisions/${scenarioId}/audit`);
+  }
+
+  // GDACS Natural Disasters
+  static async getLiveDisasters(forceRefresh: boolean = false): Promise<DisastersResponse> {
+    return this.request<DisastersResponse>(`/disasters/live${forceRefresh ? '?force_refresh=true' : ''}`);
+  }
+
+  static async getDisastersSummary(): Promise<DisastersSummaryResponse> {
+    return this.request<DisastersSummaryResponse>('/disasters/summary');
   }
 }

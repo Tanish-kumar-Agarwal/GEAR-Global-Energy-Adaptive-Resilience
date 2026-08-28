@@ -14,9 +14,10 @@ def test_explainability_missing_job():
 def test_explainability_valid_generation():
     db = MagicMock()
     
-    # Mocking Job
+    # Mocking Job / Scenario
     class MockJob:
         id = "11111111-1111-1111-1111-111111111111"
+        job_id = "11111111-1111-1111-1111-111111111111"
         result = {
             "cascade": {"initial_disruption": {"target": "CHK_HORMUZ"}},
             "impact": {"supply_gap": 10.0},
@@ -79,6 +80,7 @@ def test_explainability_missing_optimization():
     
     class MockJob:
         id = "11111111-1111-1111-1111-111111111111"
+        job_id = "11111111-1111-1111-1111-111111111111"
         result = {
             "cascade": {"initial_disruption": {"target": "CHK_HORMUZ"}},
             "impact": {"supply_gap": 10.0},
