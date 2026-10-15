@@ -271,15 +271,18 @@ export function adaptScenarioResults(
   }
 
   const impact = (raw.impact ?? {}) as Record<string, unknown>;
-  const uncertainty = (raw.uncertainty ?? {}) as Record<string, unknown>;
+  const rawUnc = (raw.uncertainty ?? {}) as Record<string, any>;
+  const rawPerc = (rawUnc.percentiles ?? {}) as Record<string, any>;
   const econ = (raw.economic_impact ?? {}) as Record<string, unknown>;
   const econImpact = (econ.impact ?? {}) as Record<string, unknown>;
-  const econUnc = (econ.uncertainty ?? {}) as Record<string, unknown>;
+  const econUnc = (econ.uncertainty ?? {}) as Record<string, any>;
   const cascade = (raw.cascade ?? {}) as Record<string, unknown>;
 
   const gap = num(impact.supply_gap);
   const baseline = num(impact.baseline_supply);
-  const p50 = num(uncertainty.p50) ?? gap;
+  const p10 = num(rawPerc.p10 ?? rawUnc.p10);
+  const p50 = num(rawPerc.p50 ?? rawUnc.p50) ?? gap;
+  const p90 = num(rawPerc.p90 ?? rawUnc.p90);
   const gapPct = gap != null && baseline ? Math.round((gap / baseline) * 100) : null;
 
   // Storage depletion arrives per-asset; empty means the job produced no
@@ -322,11 +325,23 @@ export function adaptScenarioResults(
     cascade: { initial_disruption: { target: params.targetId }, ...cascade },
     impact: { supply_gap: p50, storage_depletion: depletionPct },
     monte_carlo: {
-      p10_gap: num(uncertainty.p10),
+      p10_gap: p10,
       p50_gap: p50,
-      p90_gap: num(uncertainty.p90),
+      p90_gap: p90,
     },
-    uncertainty: { sample_count: num(uncertainty.sample_count) },
+    percentiles: {
+      p10,
+      p50,
+      p90,
+    },
+    uncertainty: { 
+      sample_count: num(rawUnc.sample_count),
+      percentiles: {
+        p10,
+        p50,
+        p90,
+      }
+    },
     economic_impact: {
       impact: {
         total: num(econImpact.total),

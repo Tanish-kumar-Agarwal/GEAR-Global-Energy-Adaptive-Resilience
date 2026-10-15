@@ -42,12 +42,21 @@ def run_monte_carlo(target_id: str, base_severity: float, duration_days: int = 3
     # 2. Statistical Validity & Resilience output formatting
     # Embed the Monte Carlo bounds into the cascade result payload.
     
+    p10_val = round(float(np.percentile(gaps_arr, 10)), 2)
+    p50_val = round(float(np.percentile(gaps_arr, 50)), 2)
+    p90_val = round(float(np.percentile(gaps_arr, 90)), 2)
+    
     mc_result = baseline_result
     mc_result["uncertainty"] = {
         "confidence": "probabilistic",
-        "p10": round(float(np.percentile(gaps_arr, 10)), 2),
-        "p50": round(float(np.percentile(gaps_arr, 50)), 2),
-        "p90": round(float(np.percentile(gaps_arr, 90)), 2),
+        "percentiles": {
+            "p10": p10_val,
+            "p50": p50_val,
+            "p90": p90_val,
+        },
+        "p10": p10_val,
+        "p50": p50_val,
+        "p90": p90_val,
         "seed": seed,
         "sample_count": iterations,
         "distributions": [

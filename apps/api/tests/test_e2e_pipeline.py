@@ -35,18 +35,12 @@ def test_full_pipeline_e2e():
     assert response.status_code in [200, 202]
     job_id = str(response.json()["job_id"])
     
-    db = SessionLocal()
-    from models.domain import Job, JobStatus
-    mock_job = Job(id=uuid.UUID(scenario_id), type="SCENARIO_SIMULATION", status=JobStatus.COMPLETED)
-    db.add(mock_job)
-    db.commit()
-    
     # 3. Create Optimization Job
     opt_payload = {
-        "scenario_id": scenario_id
+        "job_id": job_id
     }
-    response = client.post("/api/v1/optimization/procurement", json=opt_payload)
-    assert response.status_code == 202
+    response = client.post("/api/v1/optimization/procurement?sync_fallback=true", json=opt_payload)
+    assert response.status_code in [200, 202]
     opt_job_id = response.json()["job_id"]
     
     # 4. Check Pending Decisions

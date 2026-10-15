@@ -55,6 +55,9 @@ interface MapViewerProps {
   routes?: SupplyRoute[];
   chokepoints?: MapChokepointInput[];
   disasters?: DisasterEvent[];
+  // Governs provenance wording in the popup. The marker payload itself is
+  // identical for live GDACS data and the intentional offline fallback.
+  disasterIsLive?: boolean;
   visibleLayers?: Record<MapLayerId, boolean>;
   onFeatureSelect?: (feature: SelectedMapFeature) => void;
   // True while the overlay shows a severity-preview estimate rather than a
@@ -523,6 +526,7 @@ export function MapViewer({
   routes = HACKATHON_SUPPLY_ROUTES,
   chokepoints = HACKATHON_CHOKEPOINTS,
   disasters = [],
+  disasterIsLive = false,
   visibleLayers = ALL_VISIBLE,
   onFeatureSelect,
   overlayPreview = false,
@@ -535,6 +539,7 @@ export function MapViewer({
   const routesRef = useRef(routes);
   const chokepointsRef = useRef(chokepoints);
   const disastersRef = useRef(disasters);
+  const disasterIsLiveRef = useRef(disasterIsLive);
   const visibleRef = useRef(visibleLayers);
   const onSelectRef = useRef(onFeatureSelect);
 
@@ -609,7 +614,7 @@ export function MapViewer({
           .setHTML(`
             <div style="background:#0c1318; color:#f8fafc; padding:12px; border-radius:6px; border:1px solid rgba(148,163,184,0.3); font-family:sans-serif;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <span style="font-size:9px; font-weight:900; letter-spacing:1px; color:#38bdf8; text-transform:uppercase;">GDACS LIVE ALERT</span>
+                <span style="font-size:9px; font-weight:900; letter-spacing:1px; color:#38bdf8; text-transform:uppercase;">GDACS ${disasterIsLiveRef.current ? 'LIVE' : 'SNAPSHOT'} ALERT</span>
                 <span style="background:${alertColor}25; color:${alertColor}; border:1px solid ${alertColor}60; font-size:9px; font-weight:800; padding:2px 6px; border-radius:3px; text-transform:uppercase;">${props.alert_level} ALERT</span>
               </div>
               <div style="font-size:13px; font-weight:bold; color:#fff; margin-bottom:4px;">${props.name}</div>
@@ -683,6 +688,10 @@ export function MapViewer({
     if (!m || !loaded.current) return;
     (m.getSource('disasters') as maplibregl.GeoJSONSource | undefined)?.setData(disastersToGeoJSON(disasters));
   }, [disasters]);
+
+  useEffect(() => {
+    disasterIsLiveRef.current = disasterIsLive;
+  }, [disasterIsLive]);
 
   // Preview styling: entities saturated at baseline (pinned) fade far back so
   // the ones that actually move with the slider carry the signal; the dashed

@@ -13,6 +13,8 @@ def setup_db():
     Base.metadata.create_all(bind=engine)
     yield
 
+from unittest.mock import patch
+
 def test_full_orchestrator_flow():
     # 1. Create a Scenario
     scenario_res = client.post("/api/v1/scenarios", json={
@@ -25,9 +27,10 @@ def test_full_orchestrator_flow():
     scenario_id = scenario_res.json()["id"]
 
     # 2. Trigger Simulation
-    run_res = client.post(f"/api/v1/scenarios/{scenario_id}/run?sync_fallback=true")
-    assert run_res.status_code in [200, 202]
-    job_id = str(run_res.json()["job_id"])
+    with patch("workers.tasks.execute_scenario_simulation.apply"):
+        run_res = client.post(f"/api/v1/scenarios/{scenario_id}/run?sync_fallback=true")
+        assert run_res.status_code in [200, 202]
+        job_id = str(run_res.json()["job_id"])
     
     # 3. Inject Fake Simulation Job Data directly into the DB to test the Orchestrator mapping
     db = SessionLocal()
@@ -41,22 +44,31 @@ def test_full_orchestrator_flow():
         "impact": {"supply_gap": 150.5},
         "economic_impact": {"impact": {"total": "1.5B"}},
         "cascade": {"affected_routes": ["R1"], "affected_assets": ["A1"], "affected_countries": ["C1"]},
-        "uncertainty": {"P10": {"supply_gap": 100}, "P50": {"supply_gap": 150}, "P90": {"supply_gap": 200}}
+        "uncertainty": {
+            "confidence": "probabilistic",
+            "percentiles": {"p10": 100.0, "p50": 150.0, "p90": 200.0},
+            "p10": 100.0,
+            "p50": 150.0,
+            "p90": 200.0,
+            "sample_count": 50
+        }
     }
     db.commit()
 
     # 4. Trigger Optimization
-    opt_res = client.post("/api/v1/optimization/procurement", json={"scenario_id": job_id})
-    assert opt_res.status_code == 202
-    opt_job_id = opt_res.json()["job_id"]
+    with patch("workers.tasks.execute_recovery_optimization.apply"):
+        opt_res = client.post("/api/v1/optimization/procurement?sync_fallback=true", json={"scenario_id": job_id})
+        assert opt_res.status_code in [200, 202]
+        opt_job_id = opt_res.json()["job_id"]
     
     opt_job = db.query(Job).filter(Job.id == uuid.UUID(opt_job_id)).first()
     opt_job.status = JobStatus.COMPLETED
     opt_job.result = {
         "scenario_id": scenario_id,
-        "allocations": [
-            {"destination_id": "D1", "supplier_id": "S1", "route_id": "R2", "volume_allocated": 100}
-        ],
+        "allocations": {
+            "route_flows": {"R2": 100.0},
+            "reserve_drawdowns": {}
+        },
         "objective": {"optimized_shortage": 50.5, "improvement": 100.0},
         "reserve_usage": {"total_drawdown": 0},
         "avoided_loss": "1.0B"
@@ -74,6 +86,9 @@ def test_full_orchestrator_flow():
     assert master_data["status"] == "SUCCESS"
     assert master_data["problem"]["target"] == "TEST_ASSET"
     assert master_data["impact"]["supply_gap"] == 150.5
+    assert master_data["impact"]["p10_gap"] == 100.0
+    assert master_data["impact"]["p50_gap"] == 150.0
+    assert master_data["impact"]["p90_gap"] == 200.0
     assert master_data["impact"]["economic_impact_total"] == "1.5B"
     assert master_data["options"][0]["option_type"] == "ROUTING"
     assert master_data["recommendation"]["expected_physical_impact"]["shortage"] == 50.5

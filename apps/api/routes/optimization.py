@@ -60,13 +60,18 @@ def _resolve_scenario_job(req: OptimizationRequest, db: Session) -> Job:
 
 
 @router.post("/procurement", status_code=202)
-def run_procurement_optimization(req: OptimizationRequest, db: Session = Depends(get_db), user: User = Depends(RequirePermissions("optimization:execute"))):
+def run_procurement_optimization(req: OptimizationRequest, sync_fallback: bool = False, db: Session = Depends(get_db), user: User = Depends(RequirePermissions("optimization:execute"))):
     scenario_job = _resolve_scenario_job(req, db)
 
     # Create the optimization job
     opt_job = Job(type="RECOVERY_OPTIMIZATION")
     db.add(opt_job)
     db.commit()
+
+    if sync_fallback:
+        execute_recovery_optimization.apply(args=[str(opt_job.id), str(scenario_job.id)])
+        db.refresh(opt_job)
+        return {"job_id": str(opt_job.id), "status": opt_job.status.value, "execution_mode": "sync_fallback"}
 
     try:
         # Trigger Celery task

@@ -157,6 +157,33 @@ export interface MasterResponseOption {
   expected_effect: Record<string, unknown>;
 }
 
+export interface Percentiles {
+  p10: number;
+  p50: number;
+  p90: number;
+}
+
+export interface CanonicalUncertainty {
+  confidence?: string;
+  percentiles?: Percentiles;
+  p10?: number;
+  p50?: number;
+  p90?: number;
+  sample_count?: number;
+  seed?: number;
+  distributions?: Array<Record<string, any>>;
+  P10?: { supply_gap?: number };
+  P50?: { supply_gap?: number };
+  P90?: { supply_gap?: number };
+  [key: string]: any;
+}
+
+export interface AllocationsMap {
+  route_flows?: Record<string, number>;
+  reserve_drawdowns?: Record<string, number>;
+  [key: string]: any;
+}
+
 export interface MasterResponseObject {
   status: string;
   problem: {
@@ -186,7 +213,8 @@ export interface MasterResponseObject {
   options: MasterResponseOption[];
   optimization: {
     status?: string;
-    allocation?: Array<{ destination_id: string; volume_allocated: number; supplier_id: string; route_id: string }>;
+    allocations?: AllocationsMap;
+    allocation?: AllocationsMap | Array<{ destination_id: string; volume_allocated: number; supplier_id: string; route_id: string }>;
     reserve_usage?: { total_drawdown?: number };
     objective?: { baseline_shortage?: number; optimized_shortage?: number; improvement?: number };
     [key: string]: any;
@@ -202,7 +230,8 @@ export interface MasterResponseObject {
     primary_drivers: string[];
     action_plan?: {
       optimization?: {
-        allocation?: Array<{ destination_id: string; volume_allocated: number; supplier_id: string; route_id: string }>;
+        allocations?: AllocationsMap;
+        allocation?: AllocationsMap | Array<{ destination_id: string; volume_allocated: number; supplier_id: string; route_id: string }>;
         reserve_usage?: { total_drawdown?: number };
       };
     };
@@ -219,13 +248,7 @@ export interface MasterResponseObject {
     [key: string]: any;
   };
   alternatives: Array<{ strategy?: string; feasibility?: string; shortage?: string | number; [key: string]: any }>;
-  uncertainty: {
-    sample_count?: number;
-    P10?: { supply_gap?: number };
-    P50?: { supply_gap?: number };
-    P90?: { supply_gap?: number };
-    [key: string]: any;
-  };
+  uncertainty: CanonicalUncertainty;
   assumptions: Array<Record<string, any>>;
   provenance: Array<Record<string, any>>;
   decision_audit: { decision_id?: string; [key: string]: any } | null;

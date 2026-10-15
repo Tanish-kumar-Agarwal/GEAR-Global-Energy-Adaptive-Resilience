@@ -1,6 +1,25 @@
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
+class Percentiles(BaseModel):
+    p10: Optional[float] = None
+    p50: Optional[float] = None
+    p90: Optional[float] = None
+
+class UncertaintySchema(BaseModel):
+    confidence: Optional[str] = "probabilistic"
+    percentiles: Optional[Percentiles] = None
+    p10: Optional[float] = None
+    p50: Optional[float] = None
+    p90: Optional[float] = None
+    sample_count: Optional[int] = None
+    seed: Optional[int] = None
+    distributions: Optional[List[Dict[str, Any]]] = None
+
+class AllocationsSchema(BaseModel):
+    route_flows: Dict[str, float] = {}
+    reserve_drawdowns: Dict[str, float] = {}
+
 class ProblemContext(BaseModel):
     problem_id: str
     scenario_id: str

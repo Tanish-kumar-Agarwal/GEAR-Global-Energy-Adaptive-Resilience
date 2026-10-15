@@ -42,9 +42,10 @@ def calculate_economic_impact(
 
     # Physical impact parsing
     uncert = mc_results.get("uncertainty", {})
-    p10_gap = uncert.get("p10", 0)
-    p50_gap = uncert.get("p50", 0)
-    p90_gap = uncert.get("p90", 0)
+    percentiles = uncert.get("percentiles") or {}
+    p10_gap = percentiles.get("p10", uncert.get("p10", 0))
+    p50_gap = percentiles.get("p50", uncert.get("p50", 0))
+    p90_gap = percentiles.get("p90", uncert.get("p90", 0))
     
     physical_impact = {
         "supply_gap": p50_gap,
@@ -66,6 +67,11 @@ def calculate_economic_impact(
             "physical_impact": physical_impact,
             "uncertainty": {
                 "status": "data_unavailable",
+                "percentiles": {
+                    "p10": None,
+                    "p50": None,
+                    "p90": None
+                },
                 "p10": None,
                 "p50": None,
                 "p90": None
@@ -119,6 +125,11 @@ def calculate_economic_impact(
         "physical_impact": physical_impact,
         "uncertainty": {
             "status": "available",
+            "percentiles": {
+                "p10": cost_p10,
+                "p50": cost_p50,
+                "p90": cost_p90,
+            },
             "p10": cost_p10,
             "p50": cost_p50,
             "p90": cost_p90,

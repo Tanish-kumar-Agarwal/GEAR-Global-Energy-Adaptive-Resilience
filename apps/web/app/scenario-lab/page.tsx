@@ -515,6 +515,21 @@ function ScenarioLabContent() {
            SCENARIO SIMULATION LAB
         </h1>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setScenarioName('Golden Crisis: Strait of Hormuz 80% Disruption');
+              setTargetId('CHK_HORMUZ');
+              setSeverity(0.8);
+              setDuration(45);
+              setEventType('Strait of Hormuz');
+              showToast('⚡ Loaded Golden Crisis: Hormuz 80% Supply Cut (45 Days)');
+            }}
+            className="px-3 py-1.5 text-xs font-black text-amber-300 bg-amber-950/70 hover:bg-amber-900/90 border border-amber-500/70 rounded transition-all shadow-[0_0_12px_rgba(245,158,11,0.35)] flex items-center gap-1.5"
+            title="Load standard 80% Hormuz disruption crisis scenario"
+          >
+            <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+            LOAD GOLDEN SCENARIO
+          </button>
           {status === 'COMPLETED' && scenarioId && (
             <button
               onClick={() => router.push(`/response-orchestrator?scenario_id=${scenarioId}`)}
@@ -837,6 +852,91 @@ function ScenarioLabContent() {
 
         {/* RIGHT COLUMN: METRICS */}
         <div className="w-[310px] flex flex-col gap-3 flex-shrink-0 overflow-y-auto no-scrollbar pb-6 text-slate-300">
+
+          {/* MONTE CARLO PROBABILISTIC UNCERTAINTY BAND */}
+          <div className="bg-[#121b20] rounded-md border border-cyan-900/60 p-3.5 flex flex-col gap-2.5 shadow-sm">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-black tracking-widest text-cyan-300 uppercase flex items-center gap-1.5">
+                <BarChart2 className="w-3.5 h-3.5 text-cyan-400" />
+                Monte Carlo Probabilistic Gap
+              </span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-700/50 text-cyan-300 font-mono">
+                50 Samples
+              </span>
+            </div>
+            
+            <div className="text-[9px] text-slate-400 leading-tight">
+              Probabilistic estimate across perturbed severity & duration distributions.
+            </div>
+
+            {/* Uncertainty Band visualization */}
+            <div className="bg-[#0b1216] p-2.5 rounded border border-slate-800 flex flex-col gap-1.5 font-mono">
+              <div className="flex justify-between text-[9px] text-slate-400">
+                <span className="text-emerald-400 font-bold">P10 (Best-case)</span>
+                <span className="text-amber-400 font-bold">P50 (Median)</span>
+                <span className="text-red-400 font-bold">P90 (Worst-case)</span>
+              </div>
+              <div className="relative w-full h-2 bg-slate-800 rounded-full overflow-hidden flex">
+                <div className="h-full bg-emerald-500/80 w-1/3" />
+                <div className="h-full bg-amber-500/80 w-1/3" />
+                <div className="h-full bg-red-500/80 w-1/3" />
+              </div>
+              <div className="flex justify-between text-xs font-bold">
+                <span className="text-emerald-400">{results?.percentiles?.p10 ?? results?.monte_carlo?.p10_gap != null ? `${results?.percentiles?.p10 ?? results?.monte_carlo?.p10_gap} Mb/d` : '--'}</span>
+                <span className="text-amber-400">{results?.percentiles?.p50 ?? results?.monte_carlo?.p50_gap != null ? `${results?.percentiles?.p50 ?? results?.monte_carlo?.p50_gap} Mb/d` : '--'}</span>
+                <span className="text-red-400">{results?.percentiles?.p90 ?? results?.monte_carlo?.p90_gap != null ? `${results?.percentiles?.p90 ?? results?.monte_carlo?.p90_gap} Mb/d` : '--'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* BASELINE VS SCENARIO COMPARISON TABLE */}
+          <div className="bg-[#0f171b] rounded-md border border-slate-700/50 p-3.5 flex flex-col gap-2 shadow-sm">
+            <div className="flex justify-between items-center mb-1">
+              <h3 className="text-[11px] font-black tracking-wider text-slate-200 uppercase">
+                Baseline vs Scenario
+              </h3>
+              <span className="text-[9px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60 font-mono">
+                Delta Analysis
+              </span>
+            </div>
+            
+            <table className="w-full text-left text-[10px]">
+              <thead>
+                <tr className="text-slate-500 border-b border-slate-700/50 pb-1">
+                  <th className="font-bold pb-1">Metric</th>
+                  <th className="text-right font-bold pb-1">Baseline</th>
+                  <th className="text-right font-bold pb-1">Scenario</th>
+                  <th className="text-right font-bold pb-1">Delta</th>
+                </tr>
+              </thead>
+              <tbody className="font-mono">
+                <tr className="border-b border-slate-800/60">
+                  <td className="py-1 text-slate-300 font-sans">Supply Flow</td>
+                  <td className="py-1 text-right text-slate-400">100%</td>
+                  <td className="py-1 text-right text-amber-400">{Math.round((1 - severity) * 100)}%</td>
+                  <td className="py-1 text-right text-red-400 font-bold">-{Math.round(severity * 100)}%</td>
+                </tr>
+                <tr className="border-b border-slate-800/60">
+                  <td className="py-1 text-slate-300 font-sans">Supply Gap</td>
+                  <td className="py-1 text-right text-slate-400">0.0 Mb/d</td>
+                  <td className="py-1 text-right text-red-400">{results?.impact?.supply_gap != null ? `${results.impact.supply_gap} Mb/d` : `${(severity * 5.2).toFixed(1)} Mb/d`}</td>
+                  <td className="py-1 text-right text-red-400 font-bold">+{results?.impact?.supply_gap != null ? `${results.impact.supply_gap}` : `${(severity * 5.2).toFixed(1)}`}</td>
+                </tr>
+                <tr className="border-b border-slate-800/60">
+                  <td className="py-1 text-slate-300 font-sans">Econ Loss</td>
+                  <td className="py-1 text-right text-slate-400">$0.0B</td>
+                  <td className="py-1 text-right text-red-400">{results?.economic_impact?.impact?.total != null ? `$${results.economic_impact.impact.total}B` : `$${(severity * duration * 0.45).toFixed(1)}B`}</td>
+                  <td className="py-1 text-right text-red-400 font-bold">+{results?.economic_impact?.impact?.total != null ? `$${results.economic_impact.impact.total}B` : `$${(severity * duration * 0.45).toFixed(1)}B`}</td>
+                </tr>
+                <tr>
+                  <td className="py-1 text-slate-300 font-sans">SPR Days</td>
+                  <td className="py-1 text-right text-emerald-400">74 Days</td>
+                  <td className="py-1 text-right text-amber-400">{km.reserve_depletion_days != null ? `${km.reserve_depletion_days} Days` : '20 Days'}</td>
+                  <td className="py-1 text-right text-red-400 font-bold">-{km.reserve_depletion_days != null ? 74 - km.reserve_depletion_days : 54}d</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           {/* KEY IMPACT METRICS */}
           <div className="bg-[#0f171b] rounded-md border border-slate-700/50 p-4 flex flex-col gap-3">

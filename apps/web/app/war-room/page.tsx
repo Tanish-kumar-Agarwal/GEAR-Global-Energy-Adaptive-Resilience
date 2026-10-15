@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
-import { Activity, AlertTriangle, Clock, Package, Globe, TrendingUp, TrendingDown, Database, Layers, Maximize2, Check } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Activity, AlertTriangle, Clock, Package, Globe, TrendingUp, TrendingDown, Database, Layers, Maximize2, Check, Zap, Flame } from 'lucide-react';
 import { RiskTrendChart, RiskExposures, ActiveEventsList, GlobalSupplyBalanceChart } from '@/components/risk-components';
 import { SystemHealthComponent } from '@/components/system-health';
 import { MapViewer, MAP_LAYER_IDS, MAP_LAYER_LABELS, MapLayerId, SelectedMapFeature } from '@/components/map-viewer';
@@ -162,11 +162,12 @@ const ALL_LAYERS_ON: Record<MapLayerId, boolean> = {
   routes: true, chokepoints: true, disasters: true, ports: true, production: true, refineries: true, storage: true,
 };
 
-function MapToolbar({ layers, setLayers, onFullscreen, disasterSummary }: {
+function MapToolbar({ layers, setLayers, onFullscreen, disasterSummary, disasterIsLive }: {
   layers: Record<MapLayerId, boolean>;
   setLayers: React.Dispatch<React.SetStateAction<Record<MapLayerId, boolean>>>;
   onFullscreen: () => void;
   disasterSummary?: DisastersSummaryResponse | null;
+  disasterIsLive: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const allOn = MAP_LAYER_IDS.every(id => layers[id]);
@@ -200,14 +201,18 @@ function MapToolbar({ layers, setLayers, onFullscreen, disasterSummary }: {
         All Layers
       </button>
 
-      {/* GDACS Live Hazard Alert Badge */}
+      {/* The feed can deliberately fall back to the snapshot, so never call it live unless the API says it is. */}
       {disasterSummary && disasterSummary.total_active_disasters > 0 && (
-        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-950/60 border border-red-500/40 text-[9.5px] font-mono text-red-300 ml-2">
+        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[9.5px] font-mono ml-2 ${
+          disasterIsLive
+            ? 'bg-red-950/60 border border-red-500/40 text-red-300'
+            : 'bg-amber-950/60 border border-amber-500/40 text-amber-200'
+        }`}>
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+            {disasterIsLive && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>}
+            <span className={`relative inline-flex rounded-full h-2 w-2 ${disasterIsLive ? 'bg-red-500' : 'bg-amber-400'}`}></span>
           </span>
-          <span className="font-bold text-red-200">GDACS LIVE:</span>
+          <span className="font-bold">GDACS {disasterIsLive ? 'LIVE' : 'SNAPSHOT'}:</span>
           <span>{disasterSummary.total_active_disasters} Active Hazards</span>
           {disasterSummary.counts_by_alert_level?.Red > 0 && (
             <span className="bg-red-600/80 text-white font-bold px-1 rounded text-[8.5px]">
@@ -252,6 +257,7 @@ function MapToolbar({ layers, setLayers, onFullscreen, disasterSummary }: {
 }
 
 export default function WarRoom() {
+  const router = useRouter();
   const [overview, setOverview] = useState<any>(null);
   const [riskEval, setRiskEval] = useState<any>(null);
   const [assets, setAssets] = useState<MapAsset[]>(HACKATHON_MAP_ASSETS);
@@ -259,6 +265,7 @@ export default function WarRoom() {
   const [chokepoints, setChokepoints] = useState<ChokepointRow[]>(HACKATHON_CHOKEPOINTS);
   const [disasters, setDisasters] = useState<DisasterEvent[]>([]);
   const [disasterSummary, setDisasterSummary] = useState<DisastersSummaryResponse | null>(null);
+  const [disasterIsLive, setDisasterIsLive] = useState(false);
   const [regionScores, setRegionScores] = useState<Record<string, number> | undefined>(undefined);
   const [topRisks, setTopRisks] = useState<{ id: string; event: string; index: number }[]>(
     HACKATHON_TOP_RISKS.map(r => ({ id: r.id, event: r.event, index: r.index })),
@@ -280,12 +287,21 @@ export default function WarRoom() {
   // Every call goes through ApiClient, which serves the live backend and
   // falls back to snapshot payloads per request, so each panel fills with the
   // best data available without any panel blocking another.
+  const refreshDisasters = useCallback((forceRefresh = false) => {
+    ApiClient.getLiveDisasters(forceRefresh)
+      .then(res => {
+        if (res?.data) setDisasters(res.data);
+        setDisasterIsLive(res?.is_live === true);
+      })
+      .catch(console.error);
+    ApiClient.getDisastersSummary().then(setDisasterSummary).catch(console.error);
+  }, []);
+
   useEffect(() => {
     ApiClient.getWorldOverview().then(setOverview).catch(console.error);
     ApiClient.getRiskEvaluation().then(setRiskEval).catch(console.error);
     ApiClient.getWorldRoutes().then(r => setRoutes(toSupplyRoutes(r))).catch(console.error);
-    ApiClient.getLiveDisasters().then(res => { if (res?.data) setDisasters(res.data); }).catch(console.error);
-    ApiClient.getDisastersSummary().then(setDisasterSummary).catch(console.error);
+    refreshDisasters();
     Promise.all([ApiClient.getWatchlistAssets(), ApiClient.getWorldChokepoints()])
       .then(([liveAssets, liveChokepoints]) => {
         setAssets(toMapAssets(liveAssets));
@@ -320,7 +336,11 @@ export default function WarRoom() {
         if (series.length) setBalance(series);
       })
       .catch(console.error);
-  }, []);
+    // GDACS itself caches for five minutes. Polling on the same cadence keeps
+    // the map current without repeatedly hitting the upstream service.
+    const disasterTimer = window.setInterval(() => refreshDisasters(true), 5 * 60 * 1000);
+    return () => window.clearInterval(disasterTimer);
+  }, [refreshDisasters]);
 
   const toggleFullscreen = () => {
     if (document.fullscreenElement) {
@@ -403,6 +423,26 @@ export default function WarRoom() {
       {/* CENTER COLUMN */}
       <div className="flex-1 flex flex-col gap-3 min-w-0">
         
+        {/* GOLDEN SCENARIO QUICK LAUNCH BAR */}
+        <div className="bg-gradient-to-r from-red-950/80 via-amber-950/60 to-[#182227] border border-amber-500/60 rounded-md p-2.5 px-4 flex items-center justify-between shadow-[0_0_15px_rgba(245,158,11,0.2)] shrink-0">
+          <div className="flex items-center gap-2.5">
+            <Flame className="w-4 h-4 text-amber-400 animate-pulse" />
+            <span className="text-xs font-black text-white uppercase tracking-wider">
+              NATIONAL ENERGY CRISIS RESPONSE WORKFLOW
+            </span>
+            <span className="text-[10px] text-amber-300 bg-amber-950/90 px-2 py-0.5 rounded border border-amber-600/70 font-mono font-bold">
+              Active Threat: Strait of Hormuz (80% Disruption)
+            </span>
+          </div>
+          <button
+            onClick={() => router.push('/scenario-lab?target_id=CHK_HORMUZ&severity=0.8&duration=45')}
+            className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded transition-all shadow-[0_0_12px_rgba(245,158,11,0.5)] flex items-center gap-1.5 cursor-pointer"
+          >
+            <Zap className="w-3.5 h-3.5 fill-current" />
+            LAUNCH CRISIS SIMULATION & RESPONSE →
+          </button>
+        </div>
+
         {/* KPI ROW */}
         <div className="flex gap-3 min-h-[90px]">
           <KPICard title="SYSTEMIC RISK INDEX" value={overview?.systemic_risk || "--"} max="100" status={overview?.status === "ok" ? (overview.systemic_risk > 70 ? "Elevated" : "Moderate") : "DATA UNAVAILABLE"} statusColor={overview?.systemic_risk > 70 ? "text-red-400" : "text-slate-400"} chartType="up-red" />
@@ -423,7 +463,7 @@ export default function WarRoom() {
 
         {/* MAIN MAP */}
         <div ref={mapPanelRef} className="flex-1 bg-[#182227] rounded-md border border-slate-700/50 overflow-hidden relative flex flex-col">
-          <MapToolbar layers={mapLayers} setLayers={setMapLayers} onFullscreen={toggleFullscreen} disasterSummary={disasterSummary} />
+          <MapToolbar layers={mapLayers} setLayers={setMapLayers} onFullscreen={toggleFullscreen} disasterSummary={disasterSummary} disasterIsLive={disasterIsLive} />
 
           <div className="relative flex-1 bg-slate-900">
             <MapViewer
@@ -431,6 +471,7 @@ export default function WarRoom() {
               routes={routes}
               chokepoints={chokepoints}
               disasters={disasters}
+              disasterIsLive={disasterIsLive}
               visibleLayers={mapLayers}
               onFeatureSelect={(feature: SelectedMapFeature) => setSelectedAsset(feature)}
             />

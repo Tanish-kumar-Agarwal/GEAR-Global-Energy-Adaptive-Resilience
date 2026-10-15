@@ -49,12 +49,29 @@ class ResponseOrchestratorService:
         eco_impact_total = eco_data.get("impact", {}).get("total", "data_unavailable")
         supply_gap = impact_data.get("supply_gap")
         
+        # Canonical percentiles extraction
+        p10_val = None
+        p50_val = None
+        p90_val = None
+        if uncertainty:
+            percentiles = uncertainty.get("percentiles") or {}
+            p10_val = percentiles.get("p10") if percentiles.get("p10") is not None else uncertainty.get("p10")
+            p50_val = percentiles.get("p50") if percentiles.get("p50") is not None else uncertainty.get("p50")
+            p90_val = percentiles.get("p90") if percentiles.get("p90") is not None else uncertainty.get("p90")
+            # Legacy fallback if old P10 dictionary exists
+            if p10_val is None and isinstance(uncertainty.get("P10"), dict):
+                p10_val = uncertainty["P10"].get("supply_gap")
+            if p50_val is None and isinstance(uncertainty.get("P50"), dict):
+                p50_val = uncertainty["P50"].get("supply_gap")
+            if p90_val is None and isinstance(uncertainty.get("P90"), dict):
+                p90_val = uncertainty["P90"].get("supply_gap")
+        
         impact = ImpactContext(
             supply_gap=supply_gap,
             economic_impact_total=eco_impact_total,
-            p10_gap=uncertainty.get("P10", {}).get("supply_gap") if uncertainty else None,
-            p50_gap=uncertainty.get("P50", {}).get("supply_gap") if uncertainty else None,
-            p90_gap=uncertainty.get("P90", {}).get("supply_gap") if uncertainty else None,
+            p10_gap=p10_val,
+            p50_gap=p50_val,
+            p90_gap=p90_val,
             affected_routes=len(cascade_data.get("affected_routes", [])),
             affected_assets=len(cascade_data.get("affected_assets", [])),
             affected_countries=len(cascade_data.get("affected_countries", []))
@@ -79,10 +96,17 @@ class ResponseOrchestratorService:
         if opt_job and opt_job.result:
             opt_result = opt_job.result
             
-            # Construct Option
-            allocations = opt_result.get("allocations", [])
-            has_routing = len(allocations) > 0
-            has_reserve = opt_result.get("reserve_usage", {}).get("total_drawdown", 0) > 0
+            # Construct Option: handle canonical dictionary {"route_flows": ..., "reserve_drawdowns": ...} or list
+            allocations = opt_result.get("allocations") or opt_result.get("allocation") or {}
+            if isinstance(allocations, dict):
+                has_routing = bool(allocations.get("route_flows"))
+                has_reserve = bool(allocations.get("reserve_drawdowns")) or opt_result.get("reserve_usage", {}).get("total_drawdown", 0) > 0
+            elif isinstance(allocations, list):
+                has_routing = len(allocations) > 0
+                has_reserve = opt_result.get("reserve_usage", {}).get("total_drawdown", 0) > 0
+            else:
+                has_routing = False
+                has_reserve = False
             
             if has_routing:
                 options.append(OptionDetail(

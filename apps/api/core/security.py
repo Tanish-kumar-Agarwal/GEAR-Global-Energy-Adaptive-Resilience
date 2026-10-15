@@ -19,8 +19,22 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY", "super_secret_fallback_key_do_not_use_i
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
+
+class DemoPrincipal:
+    """Explicit principal context for demonstration mode when DEMO_MODE=true."""
+    def __init__(self, username: str = "demo-operator", role: Role = Role.ADMIN):
+        self.id = "principal-demo-operator"
+        self.username = username
+        self.role = role
+        self.is_active = True
+        self.is_demo = True
+
+    def __repr__(self):
+        return f"<DemoPrincipal username={self.username} role={self.role}>"
 
 # ---------------------------------------------------------
 # CENTRALIZED RBAC MATRIX
@@ -89,19 +103,66 @@ def log_security_event(db: Session, event_type: str, actor_id: str = None,
     log_event(logger, logging.INFO if outcome == "SUCCESS" else logging.WARNING, 
               event_type, actor_id=actor_id, outcome=outcome, resource_id=resource_id)
 
-def get_current_user(db: Session = Depends(get_db)):
-    # BYPASS AUTHENTICATION
-    user = db.query(User).filter(User.username == "admin").first()
-    if user:
+def is_demo_mode() -> bool:
+    return os.getenv("DEMO_MODE", "false").lower() == "true"
+
+def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """
+    Standard JWT Bearer authentication dependency.
+    If no token is provided:
+      - When DEMO_MODE=true: returns an explicit DemoPrincipal.
+      - When DEMO_MODE=false: raises HTTP 401 Unauthorized.
+    """
+    if token:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            username: str = payload.get("sub")
+            if not username:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication token claims",
+                    headers={"WWW-Authenticate": "Bearer"}
+                )
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired authentication token",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authenticated user no longer exists",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is deactivated"
+            )
         user_id_ctx.set(user.id)
         return user
-    return User(username="admin", role=Role.ADMIN, id="mock-id", is_active=True)
+
+    # No bearer token supplied in Authorization header
+    if is_demo_mode():
+        principal = DemoPrincipal(username="demo-operator", role=Role.ADMIN)
+        user_id_ctx.set(principal.id)
+        log_event(logger, logging.INFO, "DEMO_MODE_ACCESS", actor_id=principal.id, role=principal.role.value)
+        return principal
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"}
+    )
 
 class RequirePermissions:
     def __init__(self, required_permission: str):
         self.required_permission = required_permission
 
-    def __call__(self, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    def __call__(self, user = Depends(get_current_user), db: Session = Depends(get_db)):
         perms = ROLE_PERMISSIONS.get(user.role, [])
         if "*" not in perms and self.required_permission not in perms:
             log_security_event(

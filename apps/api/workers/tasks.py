@@ -67,7 +67,9 @@ def execute_scenario_simulation(self, job_id: str, target_id: str, severity: flo
             "economic_impact": economic_impact,
             "graph_overlay": scenario_overlay,
             "impacted_routes": geo_impact["impacted_routes"],
-            "impacted_chokepoints": geo_impact["impacted_chokepoints"]
+            "impacted_chokepoints": geo_impact["impacted_chokepoints"],
+            "graph_status": mc_results.get("graph_status", "HEALTHY"),
+            "provenance": mc_results.get("provenance", "DERIVED")
         }
         job.status = JobStatus.COMPLETED
         db.commit()
@@ -193,9 +195,14 @@ def execute_recovery_optimization(self, optimization_job_id: str, scenario_job_i
 
         # 4. Calculate Economic Impact of Optimized State
         # We construct a synthetic mc_results where p10, p50, p90 are all the optimized shortage
-        opt_shortage = opt_result["objective"]["shortage"]
         synth_mc = {
             "uncertainty": {
+                "confidence": "deterministic",
+                "percentiles": {
+                    "p10": opt_shortage,
+                    "p50": opt_shortage,
+                    "p90": opt_shortage,
+                },
                 "p10": opt_shortage,
                 "p50": opt_shortage,
                 "p90": opt_shortage,

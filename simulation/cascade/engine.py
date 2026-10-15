@@ -1,51 +1,84 @@
+import time
 from typing import Dict, Any, List
 from core.database import SessionLocal
 from graph.neo4j_client import neo4j_client
 from models.domain import TradeFlow, EnergyAsset, Route, Chokepoint, Supplier
 
 class AdvancedCascadeEngine:
+    _neo4j_last_checked: float = 0.0
+    _neo4j_available: bool = True
+    _NEO4J_CACHE_TTL: float = 30.0
+
     def __init__(self, db_session):
         self.db = db_session
 
     def simulate(self, target_id: str, severity: float, duration_days: int) -> Dict[str, Any]:
         """
         Executes a deterministic cascade across the physical supply chain.
+        If Neo4j is available, performs N-hop graph traversal.
+        If Neo4j is unavailable, executes a bounded relational impact calculation (GRAPH_DEGRADED).
         """
-        # 1. Resolve target and identify affected entities via Neo4j
-        # We query for downstream TradeFlows originating from or passing through the target.
-        query = """
-        MATCH (target {id: $target_id})
-        // Find downstream trade flows. The target could be a Chokepoint, Route, or Supplier
-        OPTIONAL MATCH (target)<-[:PASSES_THROUGH|USES_ROUTE|EXPORTS_VIA*0..2]-(tf:TradeFlow)
-        OPTIONAL MATCH (tf)-[:DESTINED_FOR]->(country:Country)
-        
-        RETURN 
-            target.id AS target_id,
-            collect(DISTINCT tf.id) AS affected_trade_flows,
-            collect(DISTINCT country.id) AS affected_countries
-        """
-        res = neo4j_client.execute_read(query, target_id=target_id)
-        
-        if not res or not res[0].get("affected_trade_flows"):
-            # Target not found or no downstream flows
-            return self._empty_result(target_id, severity, duration_days)
-            
-        affected_tf_ids = res[0].get("affected_trade_flows", [])
-        affected_countries = res[0].get("affected_countries", [])
-        
-        # We need to trace back which suppliers and routes are affected
-        query_upstream = """
-        MATCH (tf:TradeFlow) WHERE tf.id IN $tf_ids
-        OPTIONAL MATCH (s:Supplier)-[:EXPORTS_VIA]->(tf)
-        OPTIONAL MATCH (tf)-[:USES_ROUTE]->(r:Route)
-        RETURN 
-            collect(DISTINCT s.id) AS affected_suppliers,
-            collect(DISTINCT r.id) AS affected_routes
-        """
-        up_res = neo4j_client.execute_read(query_upstream, tf_ids=affected_tf_ids)
-        affected_suppliers = up_res[0].get("affected_suppliers", []) if up_res else []
-        affected_routes = up_res[0].get("affected_routes", []) if up_res else []
-        
+        is_graph_degraded = False
+        affected_tf_ids = []
+        affected_countries = []
+        affected_suppliers = []
+        affected_routes = []
+
+        now = time.time()
+        is_real_client = hasattr(neo4j_client, "driver")
+        if is_real_client and not AdvancedCascadeEngine._neo4j_available and (now - AdvancedCascadeEngine._neo4j_last_checked < AdvancedCascadeEngine._NEO4J_CACHE_TTL):
+            is_graph_degraded = True
+        else:
+            try:
+                # 1. Resolve target and identify affected entities via Neo4j
+                query = """
+                MATCH (target {id: $target_id})
+                // Find downstream trade flows. The target could be a Chokepoint, Route, or Supplier
+                OPTIONAL MATCH (target)<-[:PASSES_THROUGH|USES_ROUTE|EXPORTS_VIA*0..2]-(tf:TradeFlow)
+                OPTIONAL MATCH (tf)-[:DESTINED_FOR]->(country:Country)
+                
+                RETURN 
+                    target.id AS target_id,
+                    collect(DISTINCT tf.id) AS affected_trade_flows,
+                    collect(DISTINCT country.id) AS affected_countries
+                """
+                res = neo4j_client.execute_read(query, target_id=target_id)
+                AdvancedCascadeEngine._neo4j_available = True
+                AdvancedCascadeEngine._neo4j_last_checked = now
+                
+                if res and res[0].get("affected_trade_flows"):
+                    affected_tf_ids = res[0].get("affected_trade_flows", [])
+                    affected_countries = res[0].get("affected_countries", [])
+                    
+                    query_upstream = """
+                    MATCH (tf:TradeFlow) WHERE tf.id IN $tf_ids
+                    OPTIONAL MATCH (s:Supplier)-[:EXPORTS_VIA]->(tf)
+                    OPTIONAL MATCH (tf)-[:USES_ROUTE]->(r:Route)
+                    RETURN 
+                        collect(DISTINCT s.id) AS affected_suppliers,
+                        collect(DISTINCT r.id) AS affected_routes
+                    """
+                    up_res = neo4j_client.execute_read(query_upstream, tf_ids=affected_tf_ids)
+                    affected_suppliers = up_res[0].get("affected_suppliers", []) if up_res else []
+                    affected_routes = up_res[0].get("affected_routes", []) if up_res else []
+                else:
+                    return self._empty_result(target_id, severity, duration_days)
+
+            except Exception as neo_err:
+                AdvancedCascadeEngine._neo4j_available = False
+                AdvancedCascadeEngine._neo4j_last_checked = now
+                is_graph_degraded = True
+
+        if is_graph_degraded:
+            # Bounded failure: compute honest relational impact without faking graph traversal
+            flows_all = self.db.query(TradeFlow).all()
+            if not flows_all:
+                return self._empty_result(target_id, severity, duration_days)
+            affected_tf_ids = [str(f.id) for f in flows_all]
+            affected_countries = list(set([f.destination_country_id for f in flows_all if f.destination_country_id]))
+            affected_suppliers = []
+            affected_routes = []
+
         # 2. Fetch authoritative data from PostgreSQL
         flows = self.db.query(TradeFlow).all()
         assets = self.db.query(EnergyAsset).filter(EnergyAsset.type == "STORAGE").all()
@@ -119,6 +152,8 @@ class AdvancedCascadeEngine:
         
         return {
             "status": "completed",
+            "graph_status": "HEALTHY" if not is_graph_degraded else "GRAPH_DEGRADED",
+            "provenance": "LIVE" if not is_graph_degraded else "GRAPH_DEGRADED",
             "cascade": {
                 "initial_disruption": {
                     "target": target_id,

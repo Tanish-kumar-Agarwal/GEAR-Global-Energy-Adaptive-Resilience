@@ -13,6 +13,7 @@ if "DATABASE_URL" not in os.environ:
     os.environ["DATABASE_URL"] = "sqlite://"
 
 os.environ["JWT_SECRET_KEY"] = "test_jwt_secret_key_for_testing_purposes_only"
+os.environ["DEMO_MODE"] = "true"
 os.environ["CELERY_BROKER_URL"] = "memory://"
 os.environ["CELERY_RESULT_BACKEND"] = "cache+memory://"
 

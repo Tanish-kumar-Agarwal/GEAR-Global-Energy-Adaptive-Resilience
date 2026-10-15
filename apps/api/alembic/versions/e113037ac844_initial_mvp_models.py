@@ -27,6 +27,8 @@ def upgrade() -> None:
     sa.Column('risk_factor', sa.Float(), nullable=True),
     sa.Column('latitude', sa.Float(), nullable=True),
     sa.Column('longitude', sa.Float(), nullable=True),
+    sa.Column('region', sa.String(), nullable=True),
+    sa.Column('daily_transit_volume', sa.Float(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_chokepoints_id'), 'chokepoints', ['id'], unique=False)
@@ -48,7 +50,11 @@ def upgrade() -> None:
     op.create_table('geopolitical_events',
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('type', sa.String(), nullable=True),
+    sa.Column('title', sa.String(), nullable=True),
+    sa.Column('description', sa.String(), nullable=True),
     sa.Column('location', sa.String(), nullable=True),
+    sa.Column('latitude', sa.Float(), nullable=True),
+    sa.Column('longitude', sa.Float(), nullable=True),
     sa.Column('severity', sa.Float(), nullable=True),
     sa.Column('affected_entity_id', sa.String(), nullable=True),
     sa.Column('confidence', sa.Float(), nullable=True),
@@ -95,6 +101,7 @@ def upgrade() -> None:
     sa.Column('name', sa.String(), nullable=True),
     sa.Column('capacity', sa.Float(), nullable=True),
     sa.Column('transit_time_days', sa.Integer(), nullable=True),
+    sa.Column('chokepoint_id', sa.String(), sa.ForeignKey('chokepoints.id'), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_routes_id'), 'routes', ['id'], unique=False)

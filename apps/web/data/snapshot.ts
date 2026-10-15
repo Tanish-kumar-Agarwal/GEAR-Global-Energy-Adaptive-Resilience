@@ -118,7 +118,14 @@ export function buildHackathonScenarioResults(targetId: string, severity: number
     cascade: { initial_disruption: { target: targetId } },
     impact: { supply_gap: p50, storage_depletion: Math.round(severity * 32) },
     monte_carlo: { p10_gap: p10, p50_gap: p50, p90_gap: p90 },
-    uncertainty: { sample_count: 10000 },
+    percentiles: { p10, p50, p90 },
+    uncertainty: { 
+      sample_count: 10000,
+      percentiles: { p10, p50, p90 },
+      p10,
+      p50,
+      p90,
+    },
     economic_impact: {
       impact: {
         total,

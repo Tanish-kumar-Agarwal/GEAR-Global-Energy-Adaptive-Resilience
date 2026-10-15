@@ -11,6 +11,8 @@ if not DATABASE_URL:
     POSTGRES_DB = os.getenv("POSTGRES_DB", "gear")
     DATABASE_URL = f"postgresql+psycopg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
+SQLALCHEMY_DATABASE_URL = DATABASE_URL
+
 if DATABASE_URL.startswith("sqlite"):
     from sqlalchemy.pool import StaticPool
     engine = create_engine(
